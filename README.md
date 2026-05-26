@@ -1,6 +1,6 @@
 # FormSlayer
 
-A Chrome extension that auto-fills job application forms. No account, no subscription, no gotchas.
+A Chrome extension that auto-fills job application forms. No account, no subscription, no bullshit.
 
 ## What it does
 
@@ -14,6 +14,10 @@ A Chrome extension that auto-fills job application forms. No account, no subscri
 2. Go to `chrome://extensions`
 3. Enable **Developer Mode** (top right toggle)
 4. Click **Load Unpacked** and select the repo folder
+
+## Uninstall
+
+Go to `chrome://extensions`, find FormSlayer, and click **Remove**. Note this will also delete your saved settings.
 
 ## Setup
 
