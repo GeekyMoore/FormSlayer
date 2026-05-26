@@ -1,4 +1,4 @@
-const fields = ["firstName","lastName","preferredName","email","phone","address","city","state","zip","linkedin","website","jobTitle","employer","salary","startDate","coverLetter"];
+const fields = ["firstName","lastName","preferredName","email","phone","address","city","state","zip","linkedin","website","jobTitle","employer","salary","travelAvailability","relocationWillingness","gender","race","disability","veteran","educationLevel","startDate","coverLetter"];
 
 // Load saved settings
 chrome.storage.sync.get(fields, (data) => {

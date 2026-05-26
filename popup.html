@@ -5,7 +5,7 @@
     body { font-family: sans-serif; width: 300px; padding: 12px; }
     h2 { margin: 0 0 12px; font-size: 16px; }
     label { display: block; font-size: 12px; color: #555; margin-top: 8px; }
-    input, textarea { width: 100%; box-sizing: border-box; padding: 5px; font-size: 13px; border: 1px solid #ccc; border-radius: 4px; }
+    input, textarea, select { width: 100%; box-sizing: border-box; padding: 5px; font-size: 13px; border: 1px solid #ccc; border-radius: 4px; }
     textarea { height: 60px; resize: vertical; }
     .row { display: flex; gap: 8px; }
     .row input { width: 50%; }
@@ -69,6 +69,76 @@
 
   <label>Salary Expectation</label>
   <input id="salary" placeholder="$90,000" />
+
+  <label>Travel Availability</label>
+  <select id="travelAvailability">
+    <option value="">Not set</option>
+    <option value="0-25%">0-25%</option>
+    <option value="25-50%">25-50%</option>
+    <option value="50-75%">50-75%</option>
+    <option value="75-100%">75-100%</option>
+  </select>
+
+  <label>Willing to Relocate</label>
+  <select id="relocationWillingness">
+    <option value="">Not set</option>
+    <option value="yes">Yes</option>
+    <option value="no">No</option>
+  </select>
+
+  <label>Gender</label>
+  <select id="gender">
+    <option value="">Not set</option>
+    <option value="male">Male</option>
+    <option value="female">Female</option>
+    <option value="non-binary">Non-binary</option>
+    <option value="other">Other</option>
+    <option value="prefer not to say">Prefer not to say</option>
+  </select>
+
+  <label>Race / Ethnicity</label>
+  <select id="race">
+    <option value="">Not set</option>
+    <option value="american indian">American Indian or Alaska Native</option>
+    <option value="asian">Asian</option>
+    <option value="black">Black or African American</option>
+    <option value="hispanic">Hispanic or Latino</option>
+    <option value="native hawaiian">Native Hawaiian or Other Pacific Islander</option>
+    <option value="white">White</option>
+    <option value="two or more races">Two or more races</option>
+    <option value="prefer not to say">Prefer not to say</option>
+  </select>
+
+  <label>Disability Status</label>
+  <select id="disability">
+    <option value="">Not set</option>
+    <option value="yes">Yes</option>
+    <option value="no">No</option>
+    <option value="prefer not to say">Prefer not to say</option>
+  </select>
+
+  <label>Veteran Status</label>
+  <select id="veteran">
+    <option value="">Not set</option>
+    <option value="yes">Yes</option>
+    <option value="no">No</option>
+    <option value="prefer not to say">Prefer not to say</option>
+  </select>
+
+  <label>Education</label>
+  <select id="educationLevel">
+    <option value="">Not set</option>
+    <option value="high school">High School</option>
+    <option value="associate">Associate's Degree</option>
+    <option value="bachelor">Bachelor's Degree</option>
+    <option value="master">Master's Degree</option>
+    <option value="mba">Master of Business Administration (M.B.A.)</option>
+    <option value="jd">Juris Doctor (J.D.)</option>
+    <option value="md">Doctor of Medicine (M.D.)</option>
+    <option value="phd">Doctor of Philosophy (Ph.D.)</option>
+    <option value="engineer">Engineer's Degree</option>
+    <option value="other">Other</option>
+  </select>
 
   <label>Available Start Date</label>
   <input id="startDate" placeholder="2 weeks notice" />
