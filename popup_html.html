@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: sans-serif; width: 300px; padding: 12px; }
+    h2 { margin: 0 0 12px; font-size: 16px; }
+    label { display: block; font-size: 12px; color: #555; margin-top: 8px; }
+    input, textarea { width: 100%; box-sizing: border-box; padding: 5px; font-size: 13px; border: 1px solid #ccc; border-radius: 4px; }
+    textarea { height: 60px; resize: vertical; }
+    .row { display: flex; gap: 8px; }
+    .row input { width: 50%; }
+    button { margin-top: 12px; width: 100%; padding: 8px; font-size: 14px; border: none; border-radius: 4px; cursor: pointer; }
+    #saveBtn { background: #333; color: #fff; }
+    #fillBtn { background: #2563eb; color: #fff; margin-top: 6px; }
+    #status { font-size: 12px; color: green; margin-top: 6px; text-align: center; }
+  </style>
+</head>
+<body>
+  <h2>Job App Filler</h2>
+
+  <div class="row">
+    <div>
+      <label>First Name</label>
+      <input id="firstName" placeholder="Jane" />
+    </div>
+    <div>
+      <label>Last Name</label>
+      <input id="lastName" placeholder="Doe" />
+    </div>
+  </div>
+
+  <label>Preferred Name</label>
+  <input id="preferredName" placeholder="Jay (if different)" />
+
+  <label>Email</label>
+  <input id="email" placeholder="jane@email.com" />
+
+  <label>Phone</label>
+  <input id="phone" placeholder="555-555-5555" />
+
+  <label>Address</label>
+  <input id="address" placeholder="123 Main St" />
+
+  <div class="row">
+    <div>
+      <label>City</label>
+      <input id="city" placeholder="Austin" />
+    </div>
+    <div>
+      <label>State</label>
+      <input id="state" placeholder="TX" />
+    </div>
+  </div>
+
+  <label>Zip</label>
+  <input id="zip" placeholder="78701" />
+
+  <label>LinkedIn URL</label>
+  <input id="linkedin" placeholder="linkedin.com/in/jane" />
+
+  <label>Portfolio / Website</label>
+  <input id="website" placeholder="janedoe.com" />
+
+  <label>Current Job Title</label>
+  <input id="jobTitle" placeholder="Senior UX Designer" />
+
+  <label>Current Employer</label>
+  <input id="employer" placeholder="Acme Corp" />
+
+  <label>Salary Expectation</label>
+  <input id="salary" placeholder="$90,000" />
+
+  <label>Available Start Date</label>
+  <input id="startDate" placeholder="2 weeks notice" />
+
+  <label>Cover Letter (optional)</label>
+  <textarea id="coverLetter" placeholder="Paste a default cover letter..."></textarea>
+
+  <button id="saveBtn">Save Settings</button>
+  <button id="fillBtn">Fill This Form</button>
+  <div id="status"></div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

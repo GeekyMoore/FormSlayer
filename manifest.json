@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "Job App Filler",
+  "version": "1.0",
+  "description": "Auto-fills job application forms",
+  "permissions": ["storage", "activeTab", "scripting"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Job App Filler"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"]
+    }
+  ]
+}
