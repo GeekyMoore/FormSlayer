@@ -43,8 +43,16 @@ function matchField(el) {
 }
 
 function fillInput(el, value) {
+  const stringValue = value == null ? "" : String(value).trim();
+  const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set
+    || Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
+
   el.focus();
-  el.value = value;
+  if (valueSetter) {
+    valueSetter.call(el, stringValue);
+  } else {
+    el.value = stringValue;
+  }
   el.dispatchEvent(new Event("input", { bubbles: true }));
   el.dispatchEvent(new Event("change", { bubbles: true }));
   el.blur();
