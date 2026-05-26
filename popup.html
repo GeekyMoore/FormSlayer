@@ -3,7 +3,8 @@
 <head>
   <style>
     body { font-family: sans-serif; width: 300px; padding: 12px; }
-    h2 { margin: 0 0 12px; font-size: 16px; }
+    .popup-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+    .popup-header h2 { margin: 0; font-size: 16px; flex: 1; min-width: 0; }
     label { display: block; font-size: 12px; color: #555; margin-top: 8px; }
     input, textarea, select { width: 100%; box-sizing: border-box; padding: 5px; font-size: 13px; border: 1px solid #ccc; border-radius: 4px; }
     textarea { height: 60px; resize: vertical; }
@@ -11,12 +12,16 @@
     .row input { width: 50%; }
     button { margin-top: 12px; width: 100%; padding: 8px; font-size: 14px; border: none; border-radius: 4px; cursor: pointer; }
     #saveBtn { background: #333; color: #fff; }
-    #fillBtn { background: #2563eb; color: #fff; margin-top: 6px; }
-    #status { font-size: 12px; color: green; margin-top: 6px; text-align: center; }
+    #fillBtn { background: #2563eb; color: #fff; margin-top: 0; width: auto; flex-shrink: 0; padding: 6px 10px; font-size: 12px; white-space: nowrap; }
+    #status { font-size: 12px; color: green; margin: 0 0 10px; text-align: right; min-height: 16px; }
   </style>
 </head>
 <body>
-  <h2>Job App Filler</h2>
+  <div class="popup-header">
+    <h2>Job App Filler</h2>
+    <button id="fillBtn">Fill This Form</button>
+  </div>
+  <div id="status"></div>
 
   <div class="row">
     <div>
@@ -86,6 +91,27 @@
     <option value="no">No</option>
   </select>
 
+  <label>Family Member Works at Company</label>
+  <select id="familyWorksAtCompany">
+    <option value="">Not set</option>
+    <option value="yes">Yes</option>
+    <option value="no">No</option>
+  </select>
+
+  <label>Worked or Applied Here Before</label>
+  <select id="priorCompanyRelationship">
+    <option value="">Not set</option>
+    <option value="yes">Yes</option>
+    <option value="no">No</option>
+  </select>
+
+  <label>US Work Authorization</label>
+  <select id="workAuthorization">
+    <option value="">Not set</option>
+    <option value="yes">Yes</option>
+    <option value="no">No</option>
+  </select>
+
   <label>Gender</label>
   <select id="gender">
     <option value="">Not set</option>
@@ -147,8 +173,6 @@
   <textarea id="coverLetter" placeholder="Paste a default cover letter..."></textarea>
 
   <button id="saveBtn">Save Settings</button>
-  <button id="fillBtn">Fill This Form</button>
-  <div id="status"></div>
 
   <script src="popup.js"></script>
 </body>
