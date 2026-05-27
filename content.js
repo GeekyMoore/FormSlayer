@@ -255,6 +255,21 @@ function getQuestionText(el) {
   return text;
 }
 
+function getNearbyQuestionText(el) {
+  const parts = [getLabel(el), getFieldQuestionText(el)];
+  for (let node = el.parentElement, depth = 0; node && node !== document.body && depth < 6; node = node.parentElement, depth++) {
+    const nodeText = cleanLabelText(node.innerText);
+    if (nodeText && nodeText.length < 300) parts.push(nodeText);
+
+    let prev = node.previousElementSibling;
+    for (let i = 0; i < 3 && prev; i++, prev = prev.previousElementSibling) {
+      const prevText = cleanLabelText(prev.innerText);
+      if (prevText && prevText.length < 300) parts.push(prevText);
+    }
+  }
+  return [...new Set(parts.filter(Boolean))].join(" ");
+}
+
 function isWorkAuthQuestion(text) {
   if (!text) return false;
   return (
@@ -274,6 +289,8 @@ function isWorkAuthStatusQuestion(text) {
 function isSponsorshipRequiredQuestion(text) {
   if (!text) return false;
   const t = text.toLowerCase();
+  if (/currently.*future.*require.*visa sponsorship/.test(t)) return true;
+  if (/will you.*future.*require.*visa sponsorship/.test(t)) return true;
   if (/employer[- ]sponsored/.test(t) && t.includes("authorization")) return true;
   if ((t.includes("sponsor") || t.includes("sponsorship")) &&
       (t.includes("require") || t.includes("need") || /now or in the future/.test(t))) {
@@ -302,7 +319,7 @@ function workAuthAnswerForQuestion(workAuthPref, questionText) {
 }
 
 function getFieldQuestionText(el) {
-  const scoped = el.closest("fieldset,[role=group],li,.question,.form-group,.field,.form-question");
+  const scoped = el.closest("fieldset,[role=group],li,.question,.form-group,.field,.form-question,.select__container,.select");
   if (scoped) {
     const t = (scoped.innerText || "").toLowerCase().trim();
     if (t.length > 0 && t.length < 400) return t;
@@ -391,6 +408,39 @@ function setSelectOption(el, matcher) {
   return true;
 }
 
+function dispatchKey(el, key) {
+  el.dispatchEvent(new KeyboardEvent("keydown", {
+    key,
+    code: key,
+    bubbles: true,
+    cancelable: true
+  }));
+}
+
+function setComboboxOption(el, text) {
+  const input = el.tagName === "INPUT" ? el : el.querySelector("input[role='combobox']");
+  if (!input) return false;
+  const control = input.closest(".select__control") || input;
+  control.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, view: window }));
+  control.click();
+  input.focus();
+  input.click();
+  const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+  if (valueSetter) valueSetter.call(input, text);
+  else input.value = text;
+  input.dispatchEvent(new InputEvent("input", {
+    bubbles: true,
+    cancelable: true,
+    inputType: "insertText",
+    data: text
+  }));
+  dispatchKey(input, "ArrowDown");
+  dispatchKey(input, "Enter");
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+  input.blur();
+  return true;
+}
+
 function runFill(data) {
   // "Do you have at least X years of..." — click Yes
   forEachChoice(el => {
@@ -406,14 +456,27 @@ function runFill(data) {
   const workAuthPrefForPolicy = normalizePreference(data, "workAuthorization");
   forEachChoice(el => {
     if (workAuthPrefForPolicy) return;
-    const questionText = getFieldQuestionText(el);
-    if (isSponsorshipRequiredQuestion(questionText)) return;
+    const questionText = getNearbyQuestionText(el);
     const { label, parentText, value } = getChoiceContext(el);
-    if (parentText.includes("sponsor") || label.includes("sponsor")) {
+    if (isSponsorshipRequiredQuestion(questionText) || parentText.includes("sponsor") || label.includes("sponsor")) {
       if (label.includes("no") || value === "no") {
         el.click();
       }
     }
+  });
+  document.querySelectorAll("select").forEach(el => {
+    if (workAuthPrefForPolicy) return;
+    const questionText = getNearbyQuestionText(el);
+    const matchesSponsorship = isSponsorshipRequiredQuestion(questionText);
+    if (!matchesSponsorship) return;
+    setSelectOption(el, o => workAuthNoOption(o.text, o.value));
+  });
+  document.querySelectorAll("input[role='combobox']").forEach(el => {
+    if (workAuthPrefForPolicy) return;
+    const questionText = getFieldQuestionText(el);
+    const matchesSponsorship = isSponsorshipRequiredQuestion(questionText);
+    if (!matchesSponsorship) return;
+    setComboboxOption(el, "No");
   });
 
   // Valid driver's license — find the question context and click "Yes"
@@ -437,7 +500,7 @@ function runFill(data) {
   const workAuthPref = normalizePreference(data, "workAuthorization");
   if (workAuthPref) {
     forEachChoice(el => {
-      const questionText = getFieldQuestionText(el);
+      const questionText = getNearbyQuestionText(el);
       if (!shouldApplyWorkAuthSetting(questionText)) return;
       const groupKey = el.name || questionText.slice(0, 120);
       if (workAuthClickedGroups.has(groupKey)) return;
@@ -453,9 +516,10 @@ function runFill(data) {
       }
     });
     document.querySelectorAll("select").forEach(el => {
-      const questionText = getFieldQuestionText(el);
-      if (!shouldApplyWorkAuthSetting(questionText)) return;
+      const questionText = getNearbyQuestionText(el);
+      const shouldApply = shouldApplyWorkAuthSetting(questionText);
       const groupKey = "select:" + questionText.slice(0, 120);
+      if (!shouldApply) return;
       if (workAuthClickedGroups.has(groupKey)) return;
       const answer = workAuthAnswerForQuestion(workAuthPref, questionText);
       const changed = answer === "yes"
@@ -464,6 +528,16 @@ function runFill(data) {
       if (changed) {
         workAuthClickedGroups.add(groupKey);
       }
+    });
+    document.querySelectorAll("input[role='combobox']").forEach(el => {
+      const questionText = getFieldQuestionText(el);
+      const shouldApply = shouldApplyWorkAuthSetting(questionText);
+      const groupKey = "combobox:" + (el.name || el.id || questionText.slice(0, 120));
+      const answer = workAuthAnswerForQuestion(workAuthPref, questionText);
+      if (!shouldApply) return;
+      if (workAuthClickedGroups.has(groupKey)) return;
+      const changed = setComboboxOption(el, answer === "yes" ? "Yes" : "No");
+      if (changed) workAuthClickedGroups.add(groupKey);
     });
   }
 
