@@ -63,8 +63,6 @@ Click the FormSlayer icon in your Chrome toolbar, fill in your details, and hit 
 
 Navigate to a job application page, click the FormSlayer icon, then hit **Fill This Form**.
 
----
-
 ## Adding New Field Patterns
 
 If a field isn't being filled, find its label text and add it to the appropriate array in `content.js`:
