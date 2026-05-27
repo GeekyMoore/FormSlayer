@@ -1,5 +1,6 @@
 const fields = ["firstName","lastName","preferredName","email","phone","address","city","state","zip","linkedin","website","jobTitle","employer","salary","travelAvailability","relocationWillingness","familyWorksAtCompany","priorCompanyRelationship","workAuthorization","gender","race","disability","veteran","educationLevel","startDate","coverLetter"];
-const EXPECTED_CONTENT_VERSION = "required-jump-v1";
+const EXPECTED_CONTENT_VERSION = "required-markers-v1";
+const SHOW_REQUIRED_MARKERS_KEY = "showRequiredMarkers";
 let requiredFrameIds = [];
 let requiredCountsByFrame = new Map();
 
@@ -28,6 +29,10 @@ chrome.storage.sync.get(fields, (data) => {
   fields.forEach(f => {
     if (data[f]) document.getElementById(f).value = data[f];
   });
+});
+
+chrome.storage.sync.get({ [SHOW_REQUIRED_MARKERS_KEY]: true }, (data) => {
+  document.getElementById("showRequiredMarkers").checked = Boolean(data[SHOW_REQUIRED_MARKERS_KEY]);
 });
 
 // Save
@@ -80,8 +85,16 @@ function messageFrame(tabId, frameId, message, callback) {
   });
 }
 
+function getShowRequiredMarkers() {
+  return document.getElementById("showRequiredMarkers").checked;
+}
+
+function sendMarkerPreferenceToTab(tabId, enabled) {
+  messageAllFrames(tabId, { action: "setRequiredMarkers", enabled }, () => {});
+}
+
 function sendFillToTab(tabId, data, retriesLeft = 2) {
-  messageAllFrames(tabId, { action: "fill", data }, (err, responses) => {
+  messageAllFrames(tabId, { action: "fill", data, showRequiredMarkers: getShowRequiredMarkers() }, (err, responses) => {
     const okResponses = responses.filter(r => r?.ok);
     if (err || !okResponses.length) {
       if (retriesLeft > 0) {
@@ -168,6 +181,16 @@ document.getElementById("fillBtn").addEventListener("click", () => {
         });
       });
     });
+  });
+});
+
+document.getElementById("showRequiredMarkers").addEventListener("change", () => {
+  const enabled = getShowRequiredMarkers();
+  chrome.storage.sync.set({ [SHOW_REQUIRED_MARKERS_KEY]: enabled });
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    const tab = tabs[0];
+    if (!tab?.id || !tab.url || tab.url.startsWith("chrome:") || tab.url.startsWith("edge:")) return;
+    sendMarkerPreferenceToTab(tab.id, enabled);
   });
 });
 

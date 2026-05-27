@@ -16,6 +16,8 @@
     #fillBtn { background: #2563eb; color: #fff; margin-top: 0; width: auto; flex-shrink: 0; padding: 6px 10px; font-size: 12px; white-space: nowrap; }
     #nextRequiredBtn { background: #e5e7eb; color: #111827; margin-top: 0; width: auto; flex-shrink: 0; padding: 6px 8px; font-size: 12px; white-space: nowrap; }
     #nextRequiredBtn:disabled { color: #9ca3af; cursor: default; }
+    .marker-toggle { display: flex; align-items: center; gap: 6px; margin: -2px 0 8px; font-size: 12px; color: #555; }
+    .marker-toggle input { width: auto; margin: 0; }
     #status { font-size: 12px; color: green; margin: 0 0 10px; text-align: right; min-height: 16px; }
   </style>
 </head>
@@ -27,6 +29,10 @@
     </div>
     <button id="fillBtn">Fill This Form</button>
   </div>
+  <label class="marker-toggle">
+    <input id="showRequiredMarkers" type="checkbox" checked />
+    Show missing field markers
+  </label>
   <div id="status"></div>
 
   <div class="row">

@@ -1,5 +1,5 @@
 (() => {
-const CONTENT_SCRIPT_VERSION = "required-jump-v1";
+const CONTENT_SCRIPT_VERSION = "required-markers-v1";
 const fieldMap = {
   firstName:   ["first name", "first_name", "fname", "given name", "legal first", "preferred first"],
   preferredName: ["preferred name", "preferred first name", "goes by", "nickname", "full name", "fullname"],
@@ -173,6 +173,14 @@ const requiredJumpState = {
   fields: [],
   index: 0
 };
+const requiredMarkerState = {
+  enabled: true,
+  refreshTimer: null
+};
+
+const REQUIRED_MARKER_STYLE_ID = "formslayer-required-marker-style";
+const REQUIRED_MARKER_CLASS = "formslayer-required-marker-target";
+const REQUIRED_MARKER_ATTR = "data-formslayer-required-marker-target";
 
 function forEachChoice(callback) {
   document.querySelectorAll(CHOICE_SELECTOR).forEach(callback);
@@ -263,6 +271,14 @@ function getJumpTarget(el) {
 
 function getRequiredItemKey(el, target) {
   const type = (el.type || "").toLowerCase();
+  if (type === "file") {
+    const scope = getQuestionScope(el);
+    const scopeKey = scope
+      ? (scope.id || scope.getAttribute("data-qa") || cleanLabelText(scope.innerText).slice(0, 120))
+      : "";
+    if (scopeKey) return `file:scope:${scopeKey}`;
+    return `file:${el.form?.id || ""}:${el.name || ""}:${target.id || ""}`;
+  }
   if (type === "radio" || type === "checkbox") {
     return `choice:${type}:${el.form?.id || ""}:${el.name || ""}:${getFieldQuestionText(el).slice(0, 120)}`;
   }
@@ -279,7 +295,7 @@ function collectRequiredFieldState(fields = collectFillable()) {
   const seenChoiceGroups = new Set();
   const upsertItem = (key, target, answered) => {
     const existing = itemMap.get(key);
-    itemMap.set(key, { target, answered: Boolean(existing?.answered || answered) });
+    itemMap.set(key, { key, target, answered: Boolean(existing?.answered || answered) });
   };
 
   for (const el of fields) {
@@ -299,6 +315,16 @@ function collectRequiredFieldState(fields = collectFillable()) {
     if (!hasRequiredSignal(el)) continue;
     const target = getJumpTarget(el);
     upsertItem(getRequiredItemKey(el, target), target, isFieldAnswered(el));
+  }
+
+  const fileInputs = [...document.querySelectorAll("input[type='file']")];
+  for (const fileInput of fileInputs) {
+    const hasSignal = hasRequiredSignal(fileInput) || getRequiredTextCandidates(fileInput).some(hasRequiredMarker);
+    if (!hasSignal) continue;
+    const scope = getQuestionScope(fileInput) || fileInput.closest(".field,.form-group,.question,[class*='upload'],[class*='Upload']");
+    const visibleTarget = scope || fileInput.parentElement || fileInput;
+    const answered = Boolean(fileInput.files && fileInput.files.length > 0);
+    upsertItem(getRequiredItemKey(fileInput, visibleTarget), visibleTarget, answered);
   }
 
   const unansweredTargets = [];
@@ -338,8 +364,88 @@ function refreshRequiredJumpState(fields) {
   return state;
 }
 
+function ensureRequiredMarkerStyle() {
+  if (document.getElementById(REQUIRED_MARKER_STYLE_ID)) return;
+  const style = document.createElement("style");
+  style.id = REQUIRED_MARKER_STYLE_ID;
+  style.textContent = `
+    .${REQUIRED_MARKER_CLASS} {
+      outline: 2px solid #f97316 !important;
+      box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.18) !important;
+      border-radius: 4px !important;
+    }
+  `;
+  document.documentElement.appendChild(style);
+}
+
+function clearRequiredMarkers() {
+  document.querySelectorAll(`[${REQUIRED_MARKER_ATTR}="true"]`).forEach(el => {
+    el.classList.remove(REQUIRED_MARKER_CLASS);
+    el.removeAttribute(REQUIRED_MARKER_ATTR);
+  });
+}
+
+function getRequiredMarkerTarget(el) {
+  const type = (el?.type || "").toLowerCase();
+  const tag = el?.tagName;
+  const role = (el?.getAttribute("role") || "").toLowerCase();
+  const scope = getQuestionScope(el);
+  const likelyCustomSelectProxy =
+    tag === "INPUT" &&
+    (type === "text" || type === "search") &&
+    (
+      role === "combobox" ||
+      Boolean(el?.getAttribute("aria-controls")) ||
+      (el?.getAttribute("aria-haspopup") || "").toLowerCase() === "listbox" ||
+      Boolean(el?.closest?.("[role='combobox'],[class*='select'],[class*='Select'],[class*='combobox']")) ||
+      (Boolean(el?.required) && (el?.getBoundingClientRect?.().height || 0) <= 24)
+    );
+  if (type === "radio" || type === "checkbox") return scope || el.closest("label") || el;
+  if (type === "file") return scope || el.closest(".field,.form-group,.question,[class*='upload'],[class*='Upload']") || el.parentElement || el;
+  if (likelyCustomSelectProxy) return scope || el.parentElement || el;
+  if (type === "hidden" || tag === "SELECT" || role === "combobox") return scope || el;
+  return el;
+}
+
+function drawRequiredMarkers(targets) {
+  clearRequiredMarkers();
+  if (!requiredMarkerState.enabled || !targets?.length) return;
+  ensureRequiredMarkerStyle();
+  targets.forEach(el => {
+    const target = getRequiredMarkerTarget(el);
+    if (!target?.getBoundingClientRect) return;
+    const rect = target.getBoundingClientRect();
+    if (!rect.width && !rect.height) return;
+
+    target.classList.add(REQUIRED_MARKER_CLASS);
+    target.setAttribute(REQUIRED_MARKER_ATTR, "true");
+  });
+}
+
+function refreshRequiredMarkers(fields) {
+  const state = refreshRequiredJumpState(fields);
+  drawRequiredMarkers(state.unansweredTargets);
+  return state;
+}
+
+function scheduleRequiredMarkerRefresh() {
+  clearTimeout(requiredMarkerState.refreshTimer);
+  requiredMarkerState.refreshTimer = setTimeout(() => {
+    refreshRequiredMarkers();
+  }, 120);
+}
+
+function setRequiredMarkersEnabled(enabled) {
+  requiredMarkerState.enabled = Boolean(enabled);
+  if (!requiredMarkerState.enabled) {
+    clearRequiredMarkers();
+    return refreshRequiredJumpState();
+  }
+  return refreshRequiredMarkers();
+}
+
 function jumpToNextRequiredField() {
-  const state = refreshRequiredJumpState();
+  const state = refreshRequiredMarkers();
   const remaining = state.remaining;
   if (!remaining) return { jumped: false, requiredRemaining: 0, requiredTotal: state.total };
   const el = requiredJumpState.fields[requiredJumpState.index % remaining];
@@ -621,7 +727,11 @@ function setComboboxOption(el, text) {
   return true;
 }
 
-function runFill(data) {
+function runFill(data, options = {}) {
+  if (typeof options.showRequiredMarkers === "boolean") {
+    requiredMarkerState.enabled = options.showRequiredMarkers;
+  }
+
   // "Do you have at least X years of..." — click Yes
   forEachChoice(el => {
     const { label, parentText, value } = getChoiceContext(el);
@@ -806,7 +916,7 @@ function runFill(data) {
       fillInput(el, data[key]);
     }
   });
-  const requiredState = refreshRequiredJumpState(fillableNow);
+  const requiredState = refreshRequiredMarkers(fillableNow);
   return {
     mainLoopFilled,
     inputsCount: fillableNow.length,
@@ -822,8 +932,15 @@ function onFillMessage(msg, _sender, sendResponse) {
   }
   if (msg.action === "fill") {
     const payload = msg.data;
-    whenFormReady(() => sendResponse({ ok: true, debug: runFill(payload) }));
+    whenFormReady(() => sendResponse({ ok: true, debug: runFill(payload, {
+      showRequiredMarkers: msg.showRequiredMarkers
+    }) }));
     return true;
+  }
+  if (msg.action === "setRequiredMarkers") {
+    const state = setRequiredMarkersEnabled(msg.enabled);
+    sendResponse({ ok: true, debug: { requiredRemaining: state.remaining, requiredTotal: state.total } });
+    return;
   }
   if (msg.action === "jumpRequired") {
     sendResponse({ ok: true, debug: jumpToNextRequiredField() });
@@ -834,6 +951,17 @@ function onFillMessage(msg, _sender, sendResponse) {
 if (window.__formSlayerOnFillMessage) {
   chrome.runtime.onMessage.removeListener(window.__formSlayerOnFillMessage);
 }
+if (window.__formSlayerRequiredMarkerHandler) {
+  document.removeEventListener("input", window.__formSlayerRequiredMarkerHandler, true);
+  document.removeEventListener("change", window.__formSlayerRequiredMarkerHandler, true);
+}
+window.__formSlayerRequiredMarkerHandler = () => {
+  if (requiredJumpState.fields.length || document.querySelector(`[${REQUIRED_MARKER_ATTR}="true"]`)) {
+    scheduleRequiredMarkerRefresh();
+  }
+};
+document.addEventListener("input", window.__formSlayerRequiredMarkerHandler, true);
+document.addEventListener("change", window.__formSlayerRequiredMarkerHandler, true);
 window.__formSlayerOnFillMessage = onFillMessage;
 chrome.runtime.onMessage.addListener(onFillMessage);
 })();
