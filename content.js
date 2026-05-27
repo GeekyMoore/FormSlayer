@@ -7,7 +7,8 @@ const fieldMap = {
   phone:       ["phone", "phone number", "mobile number", "cell", "telephone"],
   address:     ["address", "street"],
   city:        ["city", "town", "location"],
-  state:       ["state", "province", "region"],
+  country:     ["country", "country/region", "country of residence", "country you currently reside", "country you reside", "nation"],
+  state:       ["state", "state/region", "province", "region"],
   zip:         ["zip", "zip code", "postal", "postcode"],
   linkedin:    ["linkedin", "linkedin profile", "linkedin url", "linkedin profile url"],
   website:     ["personal website", "portfolio", "personal site", "share your portfolio"],
@@ -20,7 +21,7 @@ const fieldMap = {
   startDate:   ["start date", "available to start", "when can you start", "availability", "available start"],
   coverLetter: ["cover letter"],
   familyWorksAtCompany: ["anyone in your family", "in your family currently work", "family member employed", "family member work", "know anyone who works", "relative employed", "related to an employee", "former employee at", "currently employed by a company who uses", "employed by a company who uses", "affiliated brands"],
-  priorCompanyRelationship: ["have you ever worked at", "have you ever worked for", "previously worked at any", "previously worked at", "worked at any entity", "do you currently work at", "do you currently work for", "have you ever applied", "ever applied to", "ever applied at", "previously applied", "worked here before", "prior employment with"]
+  priorCompanyRelationship: ["have you ever worked at", "have you ever worked for", "previously worked at any", "previously worked at", "previously been directly employed", "been directly employed", "directly employed by", "worked at any entity", "do you currently work at", "do you currently work for", "have you ever applied", "ever applied to", "ever applied at", "previously applied", "worked here before", "prior employment with"]
 };
 
 function normalizeTravelBucket(value) {
@@ -498,9 +499,10 @@ const autocompleteHints = {
   lastName: ["family-name"],
   email: ["email"],
   phone: ["tel", "phone"],
-  address: ["street-address", "address-line1"],
+  address: ["street-address", "address-line1", "address-line2", "address-line3"],
   city: ["address-level2"],
   state: ["address-level1"],
+  country: ["country", "country-name"],
   zip: ["postal-code"]
 };
 
@@ -513,11 +515,38 @@ function keywordMatches(haystack, keyword) {
 
 function matchField(el) {
   const haystack = getMatchHaystack(el).replace(/[_-]/g, " ");
+  const autocompleteKey = {
+    "address-level1": "state",
+    "address-level2": "city",
+    "country": "country",
+    "country-name": "country",
+    "postal-code": "zip"
+  }[(el.autocomplete || "").toLowerCase()];
+  if (autocompleteKey) return autocompleteKey;
 
   for (const [key, keywords] of Object.entries(fieldMap)) {
-    if (keywords.some(k => keywordMatches(haystack, k))) return key;
+    if (key === "address" && keywordMatches(haystack, "address") && /address-(level|line)\d/.test(haystack)) {
+      continue;
+    }
+    if (keywords.some(k => keywordMatches(haystack, k))) {
+      if (
+        (key === "firstName" || key === "lastName" || key === "preferredName") &&
+        (isReferrerNameQuestion(haystack) || isReferrerNameQuestion(getFieldQuestionText(el)))
+      ) {
+        continue;
+      }
+      return key;
+    }
     const hints = autocompleteHints[key];
-    if (hints?.some(h => keywordMatches(haystack, h))) return key;
+    if (hints?.some(h => keywordMatches(haystack, h))) {
+      if (
+        (key === "firstName" || key === "lastName" || key === "preferredName") &&
+        (isReferrerNameQuestion(haystack) || isReferrerNameQuestion(getFieldQuestionText(el)))
+      ) {
+        continue;
+      }
+      return key;
+    }
   }
   return null;
 }
@@ -529,6 +558,17 @@ function isYearsExperienceQuantityQuestion(text) {
     /\bhow many\b.*\byears?\b.*\bexperience\b/.test(normalized) ||
     /\b(number|#)\s+of\b.*\byears?\b.*\bexperience\b/.test(normalized) ||
     /\btotal\b.*\byears?\b.*\bexperience\b/.test(normalized)
+  );
+}
+
+function isReferrerNameQuestion(text) {
+  if (!text) return false;
+  const t = String(text).toLowerCase();
+  return (
+    t.includes("referral") ||
+    /\breferred\b/.test(t) ||
+    t.includes("who referred") ||
+    (t.includes("refer") && (t.includes("associate") || t.includes("employee")) && t.includes("name"))
   );
 }
 
@@ -735,18 +775,102 @@ function setComboboxOption(el, text) {
   return true;
 }
 
+const stateAliases = {
+  al: "alabama",
+  ak: "alaska",
+  az: "arizona",
+  ar: "arkansas",
+  ca: "california",
+  co: "colorado",
+  ct: "connecticut",
+  de: "delaware",
+  dc: "district of columbia",
+  fl: "florida",
+  ga: "georgia",
+  hi: "hawaii",
+  id: "idaho",
+  il: "illinois",
+  in: "indiana",
+  ia: "iowa",
+  ks: "kansas",
+  ky: "kentucky",
+  la: "louisiana",
+  me: "maine",
+  md: "maryland",
+  ma: "massachusetts",
+  mi: "michigan",
+  mn: "minnesota",
+  ms: "mississippi",
+  mo: "missouri",
+  mt: "montana",
+  ne: "nebraska",
+  nv: "nevada",
+  nh: "new hampshire",
+  nj: "new jersey",
+  nm: "new mexico",
+  ny: "new york",
+  nc: "north carolina",
+  nd: "north dakota",
+  oh: "ohio",
+  ok: "oklahoma",
+  or: "oregon",
+  pa: "pennsylvania",
+  ri: "rhode island",
+  sc: "south carolina",
+  sd: "south dakota",
+  tn: "tennessee",
+  tx: "texas",
+  ut: "utah",
+  vt: "vermont",
+  va: "virginia",
+  wa: "washington",
+  wv: "west virginia",
+  wi: "wisconsin",
+  wy: "wyoming"
+};
+const stateNamesToAbbr = Object.fromEntries(
+  Object.entries(stateAliases).map(([abbr, name]) => [name, abbr])
+);
+
+function getStateMatchValues(value) {
+  const normalized = String(value || "").toLowerCase().trim();
+  const values = [normalized];
+  if (stateAliases[normalized]) values.push(stateAliases[normalized]);
+  if (stateNamesToAbbr[normalized]) values.push(stateNamesToAbbr[normalized]);
+  return [...new Set(values.filter(Boolean))];
+}
+
 function runFill(data, options = {}) {
   if (typeof options.showRequiredMarkers === "boolean") {
     requiredMarkerState.enabled = options.showRequiredMarkers;
   }
 
-  // "Do you have at least X years of..." — click Yes
+  // "Do you have at least X years of experience..." — click Yes (not age; experience ≠ years old)
   forEachChoice(el => {
     const { label, parentText, value } = getChoiceContext(el);
-    if (/at least \d+ years?/.test(parentText) || /\d+\+ years? of experience/.test(parentText)) {
+    if (/years?\s*of\s*age/.test(parentText)) return;
+    if (/at least \d+ years? (of )?experience/.test(parentText) || /\d+\+ years? of experience/.test(parentText)) {
       if (label.includes("yes") || value === "yes") {
         el.click();
       }
+    }
+  });
+
+  // At least 18 / adult age — click Yes
+  forEachChoice(el => {
+    const { label, parentText, value } = getChoiceContext(el);
+    const questionText = getNearbyQuestionText(el) || parentText;
+    if (questionText.includes("experience")) return;
+    const isAdultAgeQuestion =
+      /at least\s*18\s*years?\s*of\s*age/.test(questionText) ||
+      /18\s*years?\s*of\s*age/.test(questionText) ||
+      /eighteen\s*years?\s*of\s*age/.test(questionText) ||
+      /\b18\s*years?\s*old\b/.test(questionText) ||
+      questionText.includes("are you an adult") ||
+      questionText.includes("legally appropriate age") ||
+      questionText.includes("of legal age");
+    if (isAdultAgeQuestion && (label.includes("yes") || value === "yes")) {
+      el.click();
     }
   });
 
@@ -920,8 +1044,16 @@ function runFill(data, options = {}) {
             const raw = String(data[key]).toLowerCase();
             opt = [...el.options].find(o => o.text.toLowerCase().includes(raw));
           }
+        } else if (key === "state") {
+          const values = getStateMatchValues(data[key]);
+          opt = [...el.options].find(o => {
+            const optionText = o.text.toLowerCase();
+            const optionValue = String(o.value || "").toLowerCase();
+            return values.some(value => optionText.includes(value) || optionValue === value);
+          });
         } else {
-          opt = [...el.options].find(o => o.text.toLowerCase().includes(data[key].toLowerCase()));
+          const raw = String(data[key]).toLowerCase();
+          opt = [...el.options].find(o => o.text.toLowerCase().includes(raw) || String(o.value || "").toLowerCase() === raw);
         }
         if (opt) setSelectOption(el, o => o === opt);
     } else {

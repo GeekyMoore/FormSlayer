@@ -10,7 +10,8 @@
     input, textarea, select { width: 100%; box-sizing: border-box; padding: 5px; font-size: 13px; border: 1px solid #ccc; border-radius: 4px; }
     textarea { height: 60px; resize: vertical; }
     .row { display: flex; gap: 8px; }
-    .row input { width: 50%; }
+    .row > div { flex: 1; min-width: 0; }
+    .row input { width: 100%; }
     button { margin-top: 12px; width: 100%; padding: 8px; font-size: 14px; border: none; border-radius: 4px; cursor: pointer; }
     #saveBtn { background: #333; color: #fff; }
     #fillBtn { background: #2563eb; color: #fff; margin-top: 0; width: auto; flex-shrink: 0; padding: 6px 10px; font-size: 12px; white-space: nowrap; }
@@ -19,6 +20,10 @@
     .marker-toggle { display: flex; align-items: center; gap: 6px; margin: -2px 0 8px; font-size: 12px; color: #555; }
     .marker-toggle input { width: auto; margin: 0; }
     #status { font-size: 12px; color: green; margin: 0 0 10px; text-align: right; min-height: 16px; }
+    .section { border: 1px solid #ddd; border-radius: 6px; margin-top: 8px; background: #fff; overflow: hidden; }
+    .section summary { padding: 8px 10px; font-size: 13px; font-weight: 600; color: #333; cursor: pointer; background: #f7f7f7; }
+    .section-content { padding: 0 10px 10px; }
+    .section-content label:first-child { margin-top: 10px; }
   </style>
 </head>
 <body>
@@ -35,154 +40,293 @@
   </label>
   <div id="status"></div>
 
-  <div class="row">
-    <div>
-      <label>First Name</label>
-      <input id="firstName" placeholder="Jane" />
+  <details class="section" open>
+    <summary>Contact</summary>
+    <div class="section-content">
+      <div class="row">
+        <div>
+          <label>First Name</label>
+          <input id="firstName" placeholder="Jane" />
+        </div>
+        <div>
+          <label>Last Name</label>
+          <input id="lastName" placeholder="Doe" />
+        </div>
+      </div>
+
+      <label>Preferred Name</label>
+      <input id="preferredName" placeholder="Jay (if different)" />
+
+      <label>Email</label>
+      <input id="email" placeholder="jane@email.com" />
+
+      <label>Phone</label>
+      <input id="phone" placeholder="555-555-5555" />
     </div>
-    <div>
-      <label>Last Name</label>
-      <input id="lastName" placeholder="Doe" />
+  </details>
+
+  <details class="section">
+    <summary>Location</summary>
+    <div class="section-content">
+      <label>Address</label>
+      <input id="address" placeholder="123 Main St" />
+
+      <div class="row">
+        <div>
+          <label>City</label>
+          <input id="city" placeholder="Austin" />
+        </div>
+        <div>
+          <label>State</label>
+          <select id="state">
+            <option value="">Not set</option>
+            <option value="Not Applicable">Not Applicable</option>
+            <option value="Alabama">Alabama</option>
+            <option value="Alaska">Alaska</option>
+            <option value="Arizona">Arizona</option>
+            <option value="Arkansas">Arkansas</option>
+            <option value="California">California</option>
+            <option value="Colorado">Colorado</option>
+            <option value="Connecticut">Connecticut</option>
+            <option value="Delaware">Delaware</option>
+            <option value="District Of Columbia">District Of Columbia</option>
+            <option value="Florida">Florida</option>
+            <option value="Georgia">Georgia</option>
+            <option value="Hawaii">Hawaii</option>
+            <option value="Idaho">Idaho</option>
+            <option value="Illinois">Illinois</option>
+            <option value="Indiana">Indiana</option>
+            <option value="Iowa">Iowa</option>
+            <option value="Kansas">Kansas</option>
+            <option value="Kentucky">Kentucky</option>
+            <option value="Louisiana">Louisiana</option>
+            <option value="Maine">Maine</option>
+            <option value="Maryland">Maryland</option>
+            <option value="Massachusetts">Massachusetts</option>
+            <option value="Michigan">Michigan</option>
+            <option value="Minnesota">Minnesota</option>
+            <option value="Mississippi">Mississippi</option>
+            <option value="Missouri">Missouri</option>
+            <option value="Montana">Montana</option>
+            <option value="Nebraska">Nebraska</option>
+            <option value="Nevada">Nevada</option>
+            <option value="New Hampshire">New Hampshire</option>
+            <option value="New Jersey">New Jersey</option>
+            <option value="New Mexico">New Mexico</option>
+            <option value="New York">New York</option>
+            <option value="North Carolina">North Carolina</option>
+            <option value="North Dakota">North Dakota</option>
+            <option value="Ohio">Ohio</option>
+            <option value="Oklahoma">Oklahoma</option>
+            <option value="Oregon">Oregon</option>
+            <option value="Pennsylvania">Pennsylvania</option>
+            <option value="Rhode Island">Rhode Island</option>
+            <option value="South Carolina">South Carolina</option>
+            <option value="South Dakota">South Dakota</option>
+            <option value="Tennessee">Tennessee</option>
+            <option value="Texas">Texas</option>
+            <option value="Utah">Utah</option>
+            <option value="Vermont">Vermont</option>
+            <option value="Virginia">Virginia</option>
+            <option value="Washington">Washington</option>
+            <option value="West Virginia">West Virginia</option>
+            <option value="Wisconsin">Wisconsin</option>
+            <option value="Wyoming">Wyoming</option>
+          </select>
+        </div>
+      </div>
+
+      <label>Country</label>
+      <select id="country">
+        <option value="">Not set</option>
+        <option value="Australia">Australia</option>
+        <option value="Austria">Austria</option>
+        <option value="Belgium">Belgium</option>
+        <option value="Brazil">Brazil</option>
+        <option value="Canada">Canada</option>
+        <option value="Chile">Chile</option>
+        <option value="China">China</option>
+        <option value="Colombia">Colombia</option>
+        <option value="Czech Republic">Czech Republic</option>
+        <option value="Denmark">Denmark</option>
+        <option value="Egypt">Egypt</option>
+        <option value="Finland">Finland</option>
+        <option value="France">France</option>
+        <option value="Germany">Germany</option>
+        <option value="Greece">Greece</option>
+        <option value="Hong Kong">Hong Kong</option>
+        <option value="Hungary">Hungary</option>
+        <option value="India">India</option>
+        <option value="Indonesia">Indonesia</option>
+        <option value="Ireland">Ireland</option>
+        <option value="Israel">Israel</option>
+        <option value="Italy">Italy</option>
+        <option value="Japan">Japan</option>
+        <option value="Malaysia">Malaysia</option>
+        <option value="Mexico">Mexico</option>
+        <option value="Netherlands">Netherlands</option>
+        <option value="New Zealand">New Zealand</option>
+        <option value="Nigeria">Nigeria</option>
+        <option value="Norway">Norway</option>
+        <option value="Pakistan">Pakistan</option>
+        <option value="Philippines">Philippines</option>
+        <option value="Poland">Poland</option>
+        <option value="Portugal">Portugal</option>
+        <option value="Romania">Romania</option>
+        <option value="Russia">Russia</option>
+        <option value="Saudi Arabia">Saudi Arabia</option>
+        <option value="Singapore">Singapore</option>
+        <option value="South Africa">South Africa</option>
+        <option value="South Korea">South Korea</option>
+        <option value="Spain">Spain</option>
+        <option value="Sweden">Sweden</option>
+        <option value="Switzerland">Switzerland</option>
+        <option value="Taiwan">Taiwan</option>
+        <option value="Thailand">Thailand</option>
+        <option value="Turkey">Turkey</option>
+        <option value="Ukraine">Ukraine</option>
+        <option value="United Arab Emirates">United Arab Emirates</option>
+        <option value="United Kingdom">United Kingdom</option>
+        <option value="United States">United States</option>
+        <option value="Vietnam">Vietnam</option>
+      </select>
+
+      <label>Zip</label>
+      <input id="zip" placeholder="78701" />
     </div>
-  </div>
+  </details>
 
-  <label>Preferred Name</label>
-  <input id="preferredName" placeholder="Jay (if different)" />
+  <details class="section">
+    <summary>Professional</summary>
+    <div class="section-content">
+      <label>LinkedIn URL</label>
+      <input id="linkedin" placeholder="linkedin.com/in/jane" />
 
-  <label>Email</label>
-  <input id="email" placeholder="jane@email.com" />
+      <label>Portfolio / Website</label>
+      <input id="website" placeholder="janedoe.com" />
 
-  <label>Phone</label>
-  <input id="phone" placeholder="555-555-5555" />
+      <label>Current Job Title</label>
+      <input id="jobTitle" placeholder="Senior UX Designer" />
 
-  <label>Address</label>
-  <input id="address" placeholder="123 Main St" />
+      <label>Current Employer</label>
+      <input id="employer" placeholder="Acme Corp" />
 
-  <div class="row">
-    <div>
-      <label>City</label>
-      <input id="city" placeholder="Austin" />
+      <label>Salary Expectation</label>
+      <input id="salary" placeholder="$90,000" />
+
+      <label>Available Start Date</label>
+      <input id="startDate" placeholder="2 weeks notice" />
     </div>
-    <div>
-      <label>State</label>
-      <input id="state" placeholder="TX" />
+  </details>
+
+  <details class="section">
+    <summary>Application Settings</summary>
+    <div class="section-content">
+      <label>Travel Availability</label>
+      <select id="travelAvailability">
+        <option value="">Not set</option>
+        <option value="0-25%">0-25%</option>
+        <option value="25-50%">25-50%</option>
+        <option value="50-75%">50-75%</option>
+        <option value="75-100%">75-100%</option>
+      </select>
+
+      <label>Willing to Relocate</label>
+      <select id="relocationWillingness">
+        <option value="">Not set</option>
+        <option value="yes">Yes</option>
+        <option value="no">No</option>
+      </select>
+
+      <label>Family Member Works at Company</label>
+      <select id="familyWorksAtCompany">
+        <option value="">Not set</option>
+        <option value="yes">Yes</option>
+        <option value="no">No</option>
+      </select>
+
+      <label>Worked or Applied Here Before</label>
+      <select id="priorCompanyRelationship">
+        <option value="">Not set</option>
+        <option value="yes">Yes</option>
+        <option value="no">No</option>
+      </select>
+
+      <label>US Work Authorization</label>
+      <select id="workAuthorization">
+        <option value="">Not set</option>
+        <option value="yes">Yes</option>
+        <option value="no">No</option>
+      </select>
     </div>
-  </div>
+  </details>
 
-  <label>Zip</label>
-  <input id="zip" placeholder="78701" />
+  <details class="section">
+    <summary>EEO & Demographics</summary>
+    <div class="section-content">
+      <label>Gender</label>
+      <select id="gender">
+        <option value="">Not set</option>
+        <option value="male">Male</option>
+        <option value="female">Female</option>
+        <option value="non-binary">Non-binary</option>
+        <option value="other">Other</option>
+        <option value="prefer not to say">Prefer not to say</option>
+      </select>
 
-  <label>LinkedIn URL</label>
-  <input id="linkedin" placeholder="linkedin.com/in/jane" />
+      <label>Race / Ethnicity</label>
+      <select id="race">
+        <option value="">Not set</option>
+        <option value="american indian">American Indian or Alaska Native</option>
+        <option value="asian">Asian</option>
+        <option value="black">Black or African American</option>
+        <option value="hispanic">Hispanic or Latino</option>
+        <option value="native hawaiian">Native Hawaiian or Other Pacific Islander</option>
+        <option value="white">White</option>
+        <option value="two or more races">Two or more races</option>
+        <option value="prefer not to say">Prefer not to say</option>
+      </select>
 
-  <label>Portfolio / Website</label>
-  <input id="website" placeholder="janedoe.com" />
+      <label>Disability Status</label>
+      <select id="disability">
+        <option value="">Not set</option>
+        <option value="yes">Yes</option>
+        <option value="no">No</option>
+        <option value="prefer not to say">Prefer not to say</option>
+      </select>
 
-  <label>Current Job Title</label>
-  <input id="jobTitle" placeholder="Senior UX Designer" />
+      <label>Veteran Status</label>
+      <select id="veteran">
+        <option value="">Not set</option>
+        <option value="yes">Yes</option>
+        <option value="no">No</option>
+        <option value="prefer not to say">Prefer not to say</option>
+      </select>
+    </div>
+  </details>
 
-  <label>Current Employer</label>
-  <input id="employer" placeholder="Acme Corp" />
+  <details class="section">
+    <summary>Education & Extras</summary>
+    <div class="section-content">
+      <label>Education</label>
+      <select id="educationLevel">
+        <option value="">Not set</option>
+        <option value="high school">High School</option>
+        <option value="associate">Associate's Degree</option>
+        <option value="bachelor">Bachelor's Degree</option>
+        <option value="master">Master's Degree</option>
+        <option value="mba">Master of Business Administration (M.B.A.)</option>
+        <option value="jd">Juris Doctor (J.D.)</option>
+        <option value="md">Doctor of Medicine (M.D.)</option>
+        <option value="phd">Doctor of Philosophy (Ph.D.)</option>
+        <option value="engineer">Engineer's Degree</option>
+        <option value="other">Other</option>
+      </select>
 
-  <label>Salary Expectation</label>
-  <input id="salary" placeholder="$90,000" />
-
-  <label>Travel Availability</label>
-  <select id="travelAvailability">
-    <option value="">Not set</option>
-    <option value="0-25%">0-25%</option>
-    <option value="25-50%">25-50%</option>
-    <option value="50-75%">50-75%</option>
-    <option value="75-100%">75-100%</option>
-  </select>
-
-  <label>Willing to Relocate</label>
-  <select id="relocationWillingness">
-    <option value="">Not set</option>
-    <option value="yes">Yes</option>
-    <option value="no">No</option>
-  </select>
-
-  <label>Family Member Works at Company</label>
-  <select id="familyWorksAtCompany">
-    <option value="">Not set</option>
-    <option value="yes">Yes</option>
-    <option value="no">No</option>
-  </select>
-
-  <label>Worked or Applied Here Before</label>
-  <select id="priorCompanyRelationship">
-    <option value="">Not set</option>
-    <option value="yes">Yes</option>
-    <option value="no">No</option>
-  </select>
-
-  <label>US Work Authorization</label>
-  <select id="workAuthorization">
-    <option value="">Not set</option>
-    <option value="yes">Yes</option>
-    <option value="no">No</option>
-  </select>
-
-  <label>Gender</label>
-  <select id="gender">
-    <option value="">Not set</option>
-    <option value="male">Male</option>
-    <option value="female">Female</option>
-    <option value="non-binary">Non-binary</option>
-    <option value="other">Other</option>
-    <option value="prefer not to say">Prefer not to say</option>
-  </select>
-
-  <label>Race / Ethnicity</label>
-  <select id="race">
-    <option value="">Not set</option>
-    <option value="american indian">American Indian or Alaska Native</option>
-    <option value="asian">Asian</option>
-    <option value="black">Black or African American</option>
-    <option value="hispanic">Hispanic or Latino</option>
-    <option value="native hawaiian">Native Hawaiian or Other Pacific Islander</option>
-    <option value="white">White</option>
-    <option value="two or more races">Two or more races</option>
-    <option value="prefer not to say">Prefer not to say</option>
-  </select>
-
-  <label>Disability Status</label>
-  <select id="disability">
-    <option value="">Not set</option>
-    <option value="yes">Yes</option>
-    <option value="no">No</option>
-    <option value="prefer not to say">Prefer not to say</option>
-  </select>
-
-  <label>Veteran Status</label>
-  <select id="veteran">
-    <option value="">Not set</option>
-    <option value="yes">Yes</option>
-    <option value="no">No</option>
-    <option value="prefer not to say">Prefer not to say</option>
-  </select>
-
-  <label>Education</label>
-  <select id="educationLevel">
-    <option value="">Not set</option>
-    <option value="high school">High School</option>
-    <option value="associate">Associate's Degree</option>
-    <option value="bachelor">Bachelor's Degree</option>
-    <option value="master">Master's Degree</option>
-    <option value="mba">Master of Business Administration (M.B.A.)</option>
-    <option value="jd">Juris Doctor (J.D.)</option>
-    <option value="md">Doctor of Medicine (M.D.)</option>
-    <option value="phd">Doctor of Philosophy (Ph.D.)</option>
-    <option value="engineer">Engineer's Degree</option>
-    <option value="other">Other</option>
-  </select>
-
-  <label>Available Start Date</label>
-  <input id="startDate" placeholder="2 weeks notice" />
-
-  <label>Cover Letter (optional)</label>
-  <textarea id="coverLetter" placeholder="Paste a default cover letter..."></textarea>
+      <label>Cover Letter (optional)</label>
+      <textarea id="coverLetter" placeholder="Paste a default cover letter..."></textarea>
+    </div>
+  </details>
 
   <button id="saveBtn">Save Settings</button>
 
