@@ -2,7 +2,6 @@
 const CONTENT_SCRIPT_VERSION = "required-markers-v1";
 const fieldMap = {
   firstName:   ["first name", "first_name", "fname", "given name", "legal first", "preferred first"],
-  preferredName: ["preferred name", "preferred first name", "goes by", "nickname", "full name", "fullname"],
   lastName:    ["last name", "last_name", "lname", "surname", "family name", "legal last"],
   email:       ["email", "e-mail"],
   phone:       ["phone", "phone number", "mobile number", "cell", "telephone"],
@@ -13,14 +12,15 @@ const fieldMap = {
   linkedin:    ["linkedin", "linkedin profile", "linkedin url", "linkedin profile url"],
   website:     ["personal website", "portfolio", "personal site", "share your portfolio"],
   jobTitle:    ["job title", "current title", "recent job title", "position", "current position"],
-  employer:    ["employer", "company", "recent employer", "current employer", "current company", "organization"],
+  employer:    ["employer", "company", "company name", "recent employer", "current employer", "current company", "organization"],
+  preferredName: ["preferred name", "preferred first name", "goes by", "nickname", "full name", "fullname", "name"],
   salary:      ["salary", "compensation", "expected salary", "salary expectation", "pay expectation", "salary expectations", "desired annual base salary", "annual base salary", "desired base salary", "base salary"],
   travelAvailability: ["travel availability", "willingness to travel", "travel requirement", "travel percentage", "percent travel", "% travel", "travel (percent)", "travel up to"],
   educationLevel: ["education", "education level", "highest education", "degree", "highest degree"],
   startDate:   ["start date", "available to start", "when can you start", "availability", "available start"],
   coverLetter: ["cover letter"],
   familyWorksAtCompany: ["anyone in your family", "in your family currently work", "family member employed", "family member work", "know anyone who works", "relative employed", "related to an employee", "former employee at", "currently employed by a company who uses", "employed by a company who uses", "affiliated brands"],
-  priorCompanyRelationship: ["have you ever worked at", "have you ever worked for", "do you currently work at", "do you currently work for", "have you ever applied", "ever applied to", "ever applied at", "previously applied", "worked here before", "prior employment with"]
+  priorCompanyRelationship: ["have you ever worked at", "have you ever worked for", "previously worked at any", "previously worked at", "worked at any entity", "do you currently work at", "do you currently work for", "have you ever applied", "ever applied to", "ever applied at", "previously applied", "worked here before", "prior employment with"]
 };
 
 function normalizeTravelBucket(value) {
@@ -558,12 +558,14 @@ function getNearbyQuestionText(el) {
 
 function isWorkAuthQuestion(text) {
   if (!text) return false;
+  const t = text.toLowerCase();
   return (
-    text.includes("work authorization") ||
-    text.includes("authorized to work") ||
-    text.includes("legally authorized to work") ||
-    /legally\s+authorized/.test(text) ||
-    (text.includes("authorization") && text.includes("united states"))
+    t.includes("work authorization") ||
+    t.includes("authorized to work") ||
+    t.includes("legally authorized to work") ||
+    /legally\s+authorized/.test(t) ||
+    (t.includes("authorization") && t.includes("united states")) ||
+    (t.includes("authorized to work") && (t.includes("country you currently reside") || t.includes("country you reside")))
   );
 }
 
@@ -583,6 +585,12 @@ function isSponsorshipRequiredQuestion(text) {
     return true;
   }
   if (t.includes("visa sponsorship") && (t.includes("require") || t.includes("need") || t.includes("will you"))) {
+    return true;
+  }
+  if ((t.includes("sponsor") || t.includes("sponsorship")) && t.includes("country you currently reside")) {
+    return true;
+  }
+  if (/require sponsorship to work in the country/.test(t)) {
     return true;
   }
   return false;
@@ -790,9 +798,10 @@ function runFill(data, options = {}) {
   const workAuthPref = normalizePreference(data, "workAuthorization");
   if (workAuthPref) {
     forEachChoice(el => {
-      const questionText = getNearbyQuestionText(el);
+      const scopedText = getFieldQuestionText(el);
+      const questionText = shouldApplyWorkAuthSetting(scopedText) ? scopedText : getNearbyQuestionText(el);
       if (!shouldApplyWorkAuthSetting(questionText)) return;
-      const groupKey = el.name || questionText.slice(0, 120);
+      const groupKey = questionText.slice(0, 120) || el.name;
       if (workAuthClickedGroups.has(groupKey)) return;
       const answer = workAuthAnswerForQuestion(workAuthPref, questionText);
       const { label } = getChoiceContext(el);
@@ -871,7 +880,10 @@ function runFill(data, options = {}) {
   // Family / prior company — radios, selects, or free-text (e.g. Gem forms type "No" in a text field)
   document.querySelectorAll("input[type=radio], input[type=checkbox], input[type=text], textarea, select").forEach(el => {
     const label = getLabel(el);
-    const text = el.type === "text" || el.tagName === "TEXTAREA" ? label : getQuestionText(el);
+    const text =
+      el.tagName === "SELECT" || el.type === "text" || el.tagName === "TEXTAREA"
+        ? label
+        : getQuestionText(el);
     const key = ["familyWorksAtCompany", "priorCompanyRelationship"].find(
       k => data[k] && fieldMap[k].some(phrase => text.includes(phrase))
     );
