@@ -95,7 +95,7 @@ function getLabel(el) {
   const parentLabel = el.closest("label");
   const parentLabelText = cleanLabelText(parentLabel?.innerText);
   if (parentLabelText) return parentLabelText;
-  // Gem / SPA forms: question text in a sibling block (span may be nested, not a direct child)
+  // SPA forms: question text in a sibling block (span may be nested, not a direct child)
   let node = el;
   for (let depth = 0; depth < 5 && node; depth++) {
     const parent = node.parentElement;
@@ -113,7 +113,7 @@ function getLabel(el) {
     }
     node = parent;
   }
-  // Label text in preceding sibling (common on Gem / SPA field rows)
+  // Label text in preceding sibling (common on SPA field rows)
   let prev = el.previousElementSibling;
   for (let i = 0; i < 3 && prev; i++, prev = prev.previousElementSibling) {
     const t = cleanLabelText(prev.innerText);
@@ -727,7 +727,9 @@ function getChoiceContext(el) {
 
 function clickChoiceIfMatches(el, pref, label, value) {
   if (!pref) return false;
-  if (label.includes(pref) || value === pref) {
+  const escapedPref = pref.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
+  const prefPattern = new RegExp(`(^|[^a-z0-9])${escapedPref}([^a-z0-9]|$)`);
+  if (prefPattern.test(label) || value === pref) {
     el.click();
     return true;
   }
@@ -1001,7 +1003,7 @@ function runFill(data, options = {}) {
     });
   });
 
-  // Family / prior company — radios, selects, or free-text (e.g. Gem forms type "No" in a text field)
+  // Family / prior company — radios, selects, or free-text (some forms type "No" in a text field)
   document.querySelectorAll("input[type=radio], input[type=checkbox], input[type=text], textarea, select").forEach(el => {
     const label = getLabel(el);
     const text =
