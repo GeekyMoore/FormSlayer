@@ -1,8 +1,6 @@
 # FormSlayer
 
-A Chrome extension that auto-fills job application forms. No account, no subscription, no bullshit.
-
-Works on any standard HTML job form — CareerPlug, Greenhouse, Jobvite, Lever, Ashby, and more.
+A Chrome extension that auto-fills job application forms.
 
 ## How It Works
 
