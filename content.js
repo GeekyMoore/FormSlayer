@@ -1,7 +1,7 @@
 (() => {
 const fieldMap = {
   firstName:   ["first name", "first_name", "fname", "given name", "legal first", "preferred first"],
-  preferredName: ["preferred name", "preferred first name", "goes by", "nickname"],
+  preferredName: ["preferred name", "preferred first name", "goes by", "nickname", "full name", "fullname"],
   lastName:    ["last name", "last_name", "lname", "surname", "family name", "legal last"],
   email:       ["email", "e-mail"],
   phone:       ["phone", "phone number", "mobile number", "cell", "telephone"],
@@ -167,8 +167,10 @@ function collectFillable() {
   return collectAll(FILLABLE_SELECTOR);
 }
 
-function hasFillableFields() {
-  return collectFillable().length > 0;
+const CHOICE_SELECTOR = "input[type=radio], input[type=checkbox]";
+
+function forEachChoice(callback) {
+  document.querySelectorAll(CHOICE_SELECTOR).forEach(callback);
 }
 
 function whenFormReady(run, maxWaitMs = 8000) {
@@ -258,6 +260,7 @@ function isWorkAuthQuestion(text) {
   return (
     text.includes("work authorization") ||
     text.includes("authorized to work") ||
+    text.includes("legally authorized to work") ||
     /legally\s+authorized/.test(text) ||
     (text.includes("authorization") && text.includes("united states"))
   );
@@ -268,8 +271,34 @@ function isWorkAuthStatusQuestion(text) {
   return /\bwork authorization status\b/.test(text) || /\bauthorization status\b/.test(text);
 }
 
+function isSponsorshipRequiredQuestion(text) {
+  if (!text) return false;
+  const t = text.toLowerCase();
+  if (/employer[- ]sponsored/.test(t) && t.includes("authorization")) return true;
+  if ((t.includes("sponsor") || t.includes("sponsorship")) &&
+      (t.includes("require") || t.includes("need") || /now or in the future/.test(t))) {
+    return true;
+  }
+  if (t.includes("visa sponsorship") && (t.includes("require") || t.includes("need") || t.includes("will you"))) {
+    return true;
+  }
+  return false;
+}
+
 function isWorkAuthYesNoQuestion(text) {
-  return isWorkAuthQuestion(text) && !isWorkAuthStatusQuestion(text);
+  return isWorkAuthQuestion(text) && !isWorkAuthStatusQuestion(text) && !isSponsorshipRequiredQuestion(text);
+}
+
+function shouldApplyWorkAuthSetting(questionText) {
+  return isWorkAuthYesNoQuestion(questionText) || isSponsorshipRequiredQuestion(questionText);
+}
+
+// Authorized in the US → no sponsorship needed; not authorized → yes sponsorship needed.
+function workAuthAnswerForQuestion(workAuthPref, questionText) {
+  if (isSponsorshipRequiredQuestion(questionText)) {
+    return workAuthPref === "yes" ? "no" : "yes";
+  }
+  return workAuthPref;
 }
 
 function getFieldQuestionText(el) {
@@ -286,15 +315,6 @@ function getFieldQuestionText(el) {
     if (t.length > text.length && t.length < 400) text = t;
   }
   return text;
-}
-
-function getLocalQuestionText(el) {
-  const scoped = el.closest("fieldset,[role=group],li,.question,.form-group,.field,.form-question");
-  if (scoped) {
-    const t = (scoped.innerText || "").toLowerCase().trim();
-    if (t.length > 0 && t.length < 400) return t;
-  }
-  return getLabel(el);
 }
 
 function workAuthYesOption(label, value) {
@@ -342,33 +362,63 @@ function fillInput(el, value) {
   el.blur();
 }
 
+function normalizePreference(data, key) {
+  return String(data[key] || "").toLowerCase().trim();
+}
+
+function getChoiceContext(el) {
+  return {
+    label: getLabel(el),
+    parentText: (el.closest("fieldset, div, li, p") || el.parentElement)?.innerText?.toLowerCase() || "",
+    value: (el.value || "").toLowerCase()
+  };
+}
+
+function clickChoiceIfMatches(el, pref, label, value) {
+  if (!pref) return false;
+  if (label.includes(pref) || value === pref) {
+    el.click();
+    return true;
+  }
+  return false;
+}
+
+function setSelectOption(el, matcher) {
+  const opt = [...el.options].find(matcher);
+  if (!opt) return false;
+  el.value = opt.value;
+  el.dispatchEvent(new Event("change", { bubbles: true }));
+  return true;
+}
+
 function runFill(data) {
   // "Do you have at least X years of..." — click Yes
-  document.querySelectorAll("input[type=radio], input[type=checkbox]").forEach(el => {
-    const label = getLabel(el);
-    const parentText = (el.closest("fieldset, div, li, p") || el.parentElement)?.innerText?.toLowerCase() || "";
+  forEachChoice(el => {
+    const { label, parentText, value } = getChoiceContext(el);
     if (/at least \d+ years?/.test(parentText) || /\d+\+ years? of experience/.test(parentText)) {
-      if (label.includes("yes") || el.value?.toLowerCase() === "yes") {
+      if (label.includes("yes") || value === "yes") {
         el.click();
       }
     }
   });
 
-  // Visa sponsorship — find any radio/checkbox near "sponsorship" and click "No"
-  document.querySelectorAll("input[type=radio], input[type=checkbox]").forEach(el => {
-    const label = getLabel(el);
-    const parentText = (el.closest("fieldset, div, li, p") || el.parentElement)?.innerText?.toLowerCase() || "";
+  // Visa sponsorship fallback — only when US Work Authorization is not set (sponsorship-required questions use that setting).
+  const workAuthPrefForPolicy = normalizePreference(data, "workAuthorization");
+  forEachChoice(el => {
+    if (workAuthPrefForPolicy) return;
+    const questionText = getFieldQuestionText(el);
+    if (isSponsorshipRequiredQuestion(questionText)) return;
+    const { label, parentText, value } = getChoiceContext(el);
     if (parentText.includes("sponsor") || label.includes("sponsor")) {
-      if (label.includes("no") || el.value?.toLowerCase() === "no") {
+      if (label.includes("no") || value === "no") {
         el.click();
       }
     }
   });
 
   // Valid driver's license — find the question context and click "Yes"
-  document.querySelectorAll("input[type=radio], input[type=checkbox]").forEach(el => {
-    const label = getLabel(el);
-    const parentText = (el.closest("fieldset, div, li, p") || el.parentElement)?.innerText?.toLowerCase() || "";
+  forEachChoice(el => {
+    const { label, parentText, value } = getChoiceContext(el);
     const isDriverLicenseQuestion =
       /driver'?s?\s+license/.test(parentText) ||
       /driver'?s?\s+license/.test(label) ||
@@ -376,7 +426,7 @@ function runFill(data) {
       (label.includes("drivers") && label.includes("license"));
 
     if (isDriverLicenseQuestion) {
-      if (label.includes("yes") || el.value?.toLowerCase() === "yes") {
+      if (label.includes("yes") || value === "yes") {
         el.click();
       }
     }
@@ -384,16 +434,17 @@ function runFill(data) {
 
   // US work authorization — only answer yes/no controls; status/details prompts need a dedicated setting.
   const workAuthClickedGroups = new Set();
-  const workAuthPref = String(data.workAuthorization || "").toLowerCase().trim();
+  const workAuthPref = normalizePreference(data, "workAuthorization");
   if (workAuthPref) {
-    document.querySelectorAll("input[type=radio], input[type=checkbox]").forEach(el => {
-      const questionText = getLocalQuestionText(el);
-      if (!isWorkAuthYesNoQuestion(questionText)) return;
+    forEachChoice(el => {
+      const questionText = getFieldQuestionText(el);
+      if (!shouldApplyWorkAuthSetting(questionText)) return;
       const groupKey = el.name || questionText.slice(0, 120);
       if (workAuthClickedGroups.has(groupKey)) return;
-      const label = getLabel(el);
+      const answer = workAuthAnswerForQuestion(workAuthPref, questionText);
+      const { label } = getChoiceContext(el);
       const value = el.value || "";
-      const matches = workAuthPref === "yes"
+      const matches = answer === "yes"
         ? workAuthYesOption(label, value)
         : workAuthNoOption(label, value);
       if (matches) {
@@ -402,30 +453,55 @@ function runFill(data) {
       }
     });
     document.querySelectorAll("select").forEach(el => {
-      const questionText = getLocalQuestionText(el);
-      if (!isWorkAuthYesNoQuestion(questionText)) return;
+      const questionText = getFieldQuestionText(el);
+      if (!shouldApplyWorkAuthSetting(questionText)) return;
       const groupKey = "select:" + questionText.slice(0, 120);
       if (workAuthClickedGroups.has(groupKey)) return;
-      const opt = workAuthPref === "yes"
-        ? [...el.options].find(o => workAuthYesOption(o.text, o.value))
-        : [...el.options].find(o => workAuthNoOption(o.text, o.value));
-      if (opt) {
-        el.value = opt.value;
-        el.dispatchEvent(new Event("change", { bubbles: true }));
+      const answer = workAuthAnswerForQuestion(workAuthPref, questionText);
+      const changed = answer === "yes"
+        ? setSelectOption(el, o => workAuthYesOption(o.text, o.value))
+        : setSelectOption(el, o => workAuthNoOption(o.text, o.value));
+      if (changed) {
         workAuthClickedGroups.add(groupKey);
       }
     });
   }
 
-  // Relocation willingness
-  document.querySelectorAll("input[type=radio], input[type=checkbox]").forEach(el => {
-    const pref = String(data.relocationWillingness || "").toLowerCase().trim();
-    if (!pref) return;
-    const label = getLabel(el);
-    const parentText = (el.closest("fieldset, div, li, p") || el.parentElement)?.innerText?.toLowerCase() || "";
-    if (parentText.includes("relocate") || label.includes("relocate")) {
-      if (label.includes(pref) || el.value?.toLowerCase() === pref) el.click();
+  const choiceSettings = [
+    {
+      key: "relocationWillingness",
+      matchesQuestion: (label, parentText) => parentText.includes("relocate") || label.includes("relocate")
+    },
+    {
+      key: "gender",
+      matchesQuestion: (label, parentText) => parentText.includes("gender") || label.includes("gender")
+    },
+    {
+      key: "race",
+      matchesQuestion: (label, parentText) =>
+        parentText.includes("race") ||
+        parentText.includes("ethnicity") ||
+        label.includes("race") ||
+        label.includes("ethnicity")
+    },
+    {
+      key: "disability",
+      matchesQuestion: (label, parentText) => parentText.includes("disability") || label.includes("disability")
+    },
+    {
+      key: "veteran",
+      matchesQuestion: (label, parentText) => parentText.includes("veteran") || label.includes("veteran")
     }
+  ];
+
+  choiceSettings.forEach(({ key, matchesQuestion }) => {
+    const pref = normalizePreference(data, key);
+    if (!pref) return;
+    forEachChoice(el => {
+      const { label, parentText, value } = getChoiceContext(el);
+      if (!matchesQuestion(label, parentText)) return;
+      clickChoiceIfMatches(el, pref, label, value);
+    });
   });
 
   // Family / prior company — radios, selects, or free-text (e.g. Gem forms type "No" in a text field)
@@ -442,55 +518,10 @@ function runFill(data) {
       return;
     }
     if (el.tagName === "SELECT") {
-      const opt = [...el.options].find(o => o.text.toLowerCase().includes(pref) || (o.value || "").toLowerCase() === pref);
-      if (opt) { el.value = opt.value; el.dispatchEvent(new Event("change", { bubbles: true })); }
+      setSelectOption(el, o => o.text.toLowerCase().includes(pref) || (o.value || "").toLowerCase() === pref);
       return;
     }
-    if (label.includes(pref) || el.value?.toLowerCase() === pref) el.click();
-  });
-
-  // Gender
-  document.querySelectorAll("input[type=radio], input[type=checkbox]").forEach(el => {
-    const pref = String(data.gender || "").toLowerCase().trim();
-    if (!pref) return;
-    const label = getLabel(el);
-    const parentText = (el.closest("fieldset, div, li, p") || el.parentElement)?.innerText?.toLowerCase() || "";
-    if (parentText.includes("gender") || label.includes("gender")) {
-      if (label.includes(pref) || el.value?.toLowerCase() === pref) el.click();
-    }
-  });
-
-  // Race / ethnicity
-  document.querySelectorAll("input[type=radio], input[type=checkbox]").forEach(el => {
-    const pref = String(data.race || "").toLowerCase().trim();
-    if (!pref) return;
-    const label = getLabel(el);
-    const parentText = (el.closest("fieldset, div, li, p") || el.parentElement)?.innerText?.toLowerCase() || "";
-    if (parentText.includes("race") || parentText.includes("ethnicity") || label.includes("race") || label.includes("ethnicity")) {
-      if (label.includes(pref) || el.value?.toLowerCase() === pref) el.click();
-    }
-  });
-
-  // Disability
-  document.querySelectorAll("input[type=radio], input[type=checkbox]").forEach(el => {
-    const pref = String(data.disability || "").toLowerCase().trim();
-    if (!pref) return;
-    const label = getLabel(el);
-    const parentText = (el.closest("fieldset, div, li, p") || el.parentElement)?.innerText?.toLowerCase() || "";
-    if (parentText.includes("disability") || label.includes("disability")) {
-      if (label.includes(pref) || el.value?.toLowerCase() === pref) el.click();
-    }
-  });
-
-  // Veteran
-  document.querySelectorAll("input[type=radio], input[type=checkbox]").forEach(el => {
-    const pref = String(data.veteran || "").toLowerCase().trim();
-    if (!pref) return;
-    const label = getLabel(el);
-    const parentText = (el.closest("fieldset, div, li, p") || el.parentElement)?.innerText?.toLowerCase() || "";
-    if (parentText.includes("veteran") || label.includes("veteran")) {
-      if (label.includes(pref) || el.value?.toLowerCase() === pref) el.click();
-    }
+    clickChoiceIfMatches(el, pref, label, (el.value || "").toLowerCase());
   });
 
   let mainLoopFilled = 0;
@@ -516,7 +547,7 @@ function runFill(data) {
         } else {
           opt = [...el.options].find(o => o.text.toLowerCase().includes(data[key].toLowerCase()));
         }
-        if (opt) { el.value = opt.value; el.dispatchEvent(new Event("change", { bubbles: true })); }
+        if (opt) setSelectOption(el, o => o === opt);
     } else {
       fillInput(el, data[key]);
     }
