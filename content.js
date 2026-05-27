@@ -1,4 +1,5 @@
 (() => {
+const CONTENT_SCRIPT_VERSION = "required-jump-v1";
 const fieldMap = {
   firstName:   ["first name", "first_name", "fname", "given name", "legal first", "preferred first"],
   preferredName: ["preferred name", "preferred first name", "goes by", "nickname", "full name", "fullname"],
@@ -137,7 +138,7 @@ function getMatchHaystack(el) {
   return parts.join(" ").toLowerCase();
 }
 
-const FILLABLE_SELECTOR = "input:not([type=hidden]):not([type=submit]):not([type=file]), textarea, select, [contenteditable='true'], [contenteditable='']";
+const FILLABLE_SELECTOR = "input:not([type=submit]):not([type=file]):not([type=button]):not([type=reset]), textarea, select, [contenteditable='true'], [contenteditable='']";
 
 function collectAll(selector) {
   const seen = new Set();
@@ -168,9 +169,188 @@ function collectFillable() {
 }
 
 const CHOICE_SELECTOR = "input[type=radio], input[type=checkbox]";
+const requiredJumpState = {
+  fields: [],
+  index: 0
+};
 
 function forEachChoice(callback) {
   document.querySelectorAll(CHOICE_SELECTOR).forEach(callback);
+}
+
+function isSkippableRequiredCandidate(el) {
+  const type = (el?.type || "").toLowerCase();
+  return !el || el.disabled || el.readOnly || ["submit", "button", "reset", "file"].includes(type);
+}
+
+function hasRequiredMarker(text) {
+  return /\*/.test(String(text || ""));
+}
+
+function getQuestionScope(el) {
+  return el.closest("fieldset,[role=group],[role='radiogroup'],li,.question,.form-group,.field,.form-question,.select__container,.select,.application-question,.questionnaire-question");
+}
+
+function getRequiredTextCandidates(el) {
+  const parts = [];
+  const pushText = (text, maxLen = 250) => {
+    const value = String(text || "").trim();
+    if (value && value.length < maxLen) parts.push(value);
+  };
+  if (el.id) {
+    pushText(document.querySelector(`label[for="${el.id}"]`)?.innerText);
+  }
+  const labelledBy = el.getAttribute("aria-labelledby");
+  if (labelledBy) {
+    pushText(labelledBy
+      .split(/\s+/)
+      .map(id => document.getElementById(id)?.innerText?.trim())
+      .filter(Boolean)
+      .join(" "));
+  }
+  pushText(el.closest("label")?.innerText);
+  const scoped = getQuestionScope(el);
+  if (scoped) {
+    scoped
+      .querySelectorAll("label, legend, [class*='label'], [class*='Label'], [class*='question'], [class*='Question']")
+      .forEach(node => pushText(node.innerText));
+  }
+  let prev = el.previousElementSibling;
+  for (let i = 0; i < 3 && prev; i++, prev = prev.previousElementSibling) {
+    pushText(prev.innerText);
+  }
+  return parts;
+}
+
+function hasRequiredSignal(el) {
+  if (!el || isSkippableRequiredCandidate(el)) return false;
+  const type = (el.type || "").toLowerCase();
+  return (
+    el.required ||
+    el.hasAttribute("required") ||
+    (el.getAttribute("aria-required") || "").toLowerCase() === "true" ||
+    Boolean(el.validity?.valueMissing) ||
+    (type !== "hidden" && getRequiredTextCandidates(el).some(hasRequiredMarker))
+  );
+}
+
+function isFieldAnswered(el) {
+  const tag = el.tagName;
+  const type = (el.type || "").toLowerCase();
+  if (type === "radio" || type === "checkbox") return el.checked;
+  if (tag === "SELECT") {
+    const idx = el.selectedIndex;
+    if (idx < 0) return false;
+    const value = String(el.value || "").trim();
+    const selectedText = String(el.options?.[idx]?.text || "").toLowerCase().trim();
+    return Boolean(value) && !/^(select|choose|please select|not set)\b/.test(selectedText);
+  }
+  if ((el.getAttribute("role") || "").toLowerCase() === "combobox") {
+    const value = String(el.value || el.getAttribute("aria-valuetext") || el.textContent || "").trim();
+    return value !== "";
+  }
+  if (el.isContentEditable) return String(el.textContent || "").trim() !== "";
+  return String(el.value || "").trim() !== "";
+}
+
+function getJumpTarget(el) {
+  const type = (el.type || "").toLowerCase();
+  if (type !== "hidden") return el;
+  const scope = getQuestionScope(el) || el.parentElement;
+  if (!scope) return el;
+  return scope.querySelector("[role='combobox'], input[role='combobox'], select, textarea, input:not([type=hidden])") || el;
+}
+
+function getRequiredItemKey(el, target) {
+  const type = (el.type || "").toLowerCase();
+  if (type === "radio" || type === "checkbox") {
+    return `choice:${type}:${el.form?.id || ""}:${el.name || ""}:${getFieldQuestionText(el).slice(0, 120)}`;
+  }
+  const scope = getQuestionScope(el);
+  const scopeKey = scope
+    ? (scope.id || scope.getAttribute("data-qa") || cleanLabelText(scope.innerText).slice(0, 120))
+    : "";
+  if (scopeKey) return `field:scope:${scopeKey}`;
+  return `field:${el.tagName}:${type}:${el.name || ""}:${target.id || ""}`;
+}
+
+function collectRequiredFieldState(fields = collectFillable()) {
+  const itemMap = new Map();
+  const seenChoiceGroups = new Set();
+  const upsertItem = (key, target, answered) => {
+    const existing = itemMap.get(key);
+    itemMap.set(key, { target, answered: Boolean(existing?.answered || answered) });
+  };
+
+  for (const el of fields) {
+    if (isSkippableRequiredCandidate(el)) continue;
+    const type = (el.type || "").toLowerCase();
+
+    if (type === "radio" || type === "checkbox") {
+      const key = getRequiredItemKey(el, el);
+      if (seenChoiceGroups.has(key)) continue;
+      seenChoiceGroups.add(key);
+      const group = getChoiceGroup(el);
+      if (!group.some(hasRequiredSignal)) continue;
+      upsertItem(key, getJumpTarget(el), group.some(candidate => candidate.checked));
+      continue;
+    }
+
+    if (!hasRequiredSignal(el)) continue;
+    const target = getJumpTarget(el);
+    upsertItem(getRequiredItemKey(el, target), target, isFieldAnswered(el));
+  }
+
+  const unansweredTargets = [];
+  const seenTargets = new Set();
+  let total = 0;
+  let answered = 0;
+  for (const { target, answered: isAnswered } of itemMap.values()) {
+    total++;
+    if (isAnswered) {
+      answered++;
+      continue;
+    }
+    if (!seenTargets.has(target)) {
+      seenTargets.add(target);
+      unansweredTargets.push(target);
+    }
+  }
+  return { total, answered, remaining: total - answered, unansweredTargets };
+}
+
+function getChoiceGroup(el) {
+  const type = (el.type || "").toLowerCase();
+  if (type !== "radio" && type !== "checkbox") return [el];
+  if (!el.name) return [el];
+  return [...document.querySelectorAll(`input[type="${type}"]`)]
+    .filter(candidate => candidate.name === el.name && candidate.form === el.form);
+}
+
+function collectUnfilledRequiredFields(fields = collectFillable()) {
+  return collectRequiredFieldState(fields).unansweredTargets;
+}
+
+function refreshRequiredJumpState(fields) {
+  const state = collectRequiredFieldState(fields);
+  requiredJumpState.fields = state.unansweredTargets;
+  if (requiredJumpState.index >= requiredJumpState.fields.length) requiredJumpState.index = 0;
+  return state;
+}
+
+function jumpToNextRequiredField() {
+  const state = refreshRequiredJumpState();
+  const remaining = state.remaining;
+  if (!remaining) return { jumped: false, requiredRemaining: 0, requiredTotal: state.total };
+  const el = requiredJumpState.fields[requiredJumpState.index % remaining];
+  requiredJumpState.index = (requiredJumpState.index + 1) % remaining;
+  el.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+  try {
+    el.focus({ preventScroll: true });
+  } catch (_) {
+    el.focus();
+  }
+  return { jumped: true, requiredRemaining: remaining, requiredTotal: state.total };
 }
 
 function whenFormReady(run, maxWaitMs = 8000) {
@@ -626,18 +806,28 @@ function runFill(data) {
       fillInput(el, data[key]);
     }
   });
-  return { mainLoopFilled, inputsCount: fillableNow.length };
+  const requiredState = refreshRequiredJumpState(fillableNow);
+  return {
+    mainLoopFilled,
+    inputsCount: fillableNow.length,
+    requiredRemaining: requiredState.remaining,
+    requiredTotal: requiredState.total
+  };
 }
 
 function onFillMessage(msg, _sender, sendResponse) {
   if (msg.action === "ping") {
-    sendResponse({ ok: true });
+    sendResponse({ ok: true, version: CONTENT_SCRIPT_VERSION });
     return;
   }
   if (msg.action === "fill") {
     const payload = msg.data;
     whenFormReady(() => sendResponse({ ok: true, debug: runFill(payload) }));
     return true;
+  }
+  if (msg.action === "jumpRequired") {
+    sendResponse({ ok: true, debug: jumpToNextRequiredField() });
+    return;
   }
 }
 

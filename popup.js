@@ -1,4 +1,27 @@
 const fields = ["firstName","lastName","preferredName","email","phone","address","city","state","zip","linkedin","website","jobTitle","employer","salary","travelAvailability","relocationWillingness","familyWorksAtCompany","priorCompanyRelationship","workAuthorization","gender","race","disability","veteran","educationLevel","startDate","coverLetter"];
+const EXPECTED_CONTENT_VERSION = "required-jump-v1";
+let requiredFrameIds = [];
+let requiredCountsByFrame = new Map();
+
+function setRequiredStatus(count) {
+  const requiredStatus = document.getElementById("requiredStatus");
+  const nextRequiredBtn = document.getElementById("nextRequiredBtn");
+  if (typeof count !== "number") {
+    requiredStatus.textContent = "Required left: --";
+    nextRequiredBtn.disabled = true;
+    return;
+  }
+  requiredStatus.textContent = `Required left: ${count}`;
+  nextRequiredBtn.disabled = count <= 0;
+}
+
+function syncRequiredStatusFromFrames() {
+  const total = [...requiredCountsByFrame.values()].reduce((sum, count) => sum + count, 0);
+  requiredFrameIds = [...requiredCountsByFrame.entries()]
+    .filter(([, count]) => count > 0)
+    .map(([frameId]) => frameId);
+  setRequiredStatus(total);
+}
 
 // Load saved settings
 chrome.storage.sync.get(fields, (data) => {
@@ -43,12 +66,18 @@ function messageAllFrames(tabId, message, callback) {
       let pending = results.length;
       results.forEach((r) => {
         chrome.tabs.sendMessage(tabId, message, { frameId: r.frameId }, (response) => {
-          if (!chrome.runtime.lastError && response) responses.push(response);
+          if (!chrome.runtime.lastError && response) responses.push({ ...response, frameId: r.frameId });
           if (--pending === 0) callback(null, responses);
         });
       });
     }
   );
+}
+
+function messageFrame(tabId, frameId, message, callback) {
+  chrome.tabs.sendMessage(tabId, message, { frameId }, (response) => {
+    callback(chrome.runtime.lastError, response);
+  });
 }
 
 function sendFillToTab(tabId, data, retriesLeft = 2) {
@@ -69,12 +98,40 @@ function sendFillToTab(tabId, data, retriesLeft = 2) {
       return;
     }
     const filled = okResponses.reduce((sum, r) => sum + (r.debug?.mainLoopFilled || 0), 0);
+    requiredCountsByFrame = new Map(
+      okResponses.map(r => [r.frameId, r.debug?.requiredRemaining || 0])
+    );
+    syncRequiredStatusFromFrames();
     const frames = okResponses.length;
     if (filled) {
       setStatus(`Filled ${filled} field(s) in ${frames} frame(s)`);
     } else {
       setStatus(`Filled (${frames} frame(s), 0 matched)`);
     }
+  });
+}
+
+function jumpRequiredInFrames(tabId, frameIds, index = 0) {
+  if (index >= frameIds.length) {
+    requiredCountsByFrame.clear();
+    requiredFrameIds = [];
+    setRequiredStatus(0);
+    return;
+  }
+  messageFrame(tabId, frameIds[index], { action: "jumpRequired" }, (err, response) => {
+    if (err || !response?.ok) {
+      jumpRequiredInFrames(tabId, frameIds, index + 1);
+      return;
+    }
+    const requiredRemaining = response.debug?.requiredRemaining || 0;
+    requiredCountsByFrame.set(frameIds[index], requiredRemaining);
+    if (response.debug?.jumped) {
+      syncRequiredStatusFromFrames();
+      return;
+    }
+    requiredCountsByFrame.set(frameIds[index], 0);
+    syncRequiredStatusFromFrames();
+    jumpRequiredInFrames(tabId, frameIds, index + 1);
   });
 }
 
@@ -97,7 +154,8 @@ document.getElementById("fillBtn").addEventListener("click", () => {
         return;
       }
       messageAllFrames(tab.id, { action: "ping" }, (err, responses) => {
-        if (!err && responses.some(r => r?.ok)) {
+        const hasMatchingVersion = !err && responses.some(r => r?.ok && r.version === EXPECTED_CONTENT_VERSION);
+        if (hasMatchingVersion) {
           sendFillToTab(tab.id, data);
           return;
         }
@@ -110,5 +168,17 @@ document.getElementById("fillBtn").addEventListener("click", () => {
         });
       });
     });
+  });
+});
+
+document.getElementById("nextRequiredBtn").addEventListener("click", () => {
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    const tab = tabs[0];
+    if (!tab?.id || !requiredFrameIds.length) {
+      requiredCountsByFrame.clear();
+      setRequiredStatus(0);
+      return;
+    }
+    jumpRequiredInFrames(tab.id, [...requiredFrameIds]);
   });
 });
