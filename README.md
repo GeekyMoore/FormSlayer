@@ -4,8 +4,6 @@ A Chrome extension that auto-fills job application forms. No account, no subscri
 
 Works on any standard HTML job form — CareerPlug, Greenhouse, Jobvite, Lever, Ashby, and more.
 
----
-
 ## How It Works
 
 FormSlayer uses three core mechanisms to fill forms intelligently:
@@ -46,8 +44,6 @@ Some fields can't be pre-filled — open-ended questions custom to the role, for
 
 EEOC and similar optional fields can generally be skipped, but for the rare cases they're required, FormSlayer can store that information too. All such fields are entirely optional.
 
----
-
 ## Install
 
 1. Clone or download this repo
@@ -58,8 +54,6 @@ EEOC and similar optional fields can generally be skipped, but for the rare case
 ## Uninstall
 
 Go to `chrome://extensions`, find FormSlayer, and click **Remove**. This will also delete your saved settings.
-
----
 
 ## Setup
 
@@ -79,8 +73,6 @@ If a field isn't being filled, find its label text and add it to the appropriate
 phone: ["phone", "mobile", "cell", "telephone", "your new pattern here"],
 ```
 
----
-
 ## File Structure
 
 ```
@@ -90,21 +82,15 @@ popup.js        — Save/load settings
 content.js      — Form detection and filling logic
 ```
 
----
-
 ## Privacy
 
 FormSlayer has no call-home functions. Your data stays local to your machine via `chrome.storage.sync`. The repo is fully open to inspection under the MIT license.
 
 All settings are optional — if you'd rather not save personal details like location, gender, or ethnicity, leave them blank. FormSlayer will fill what it can with whatever you've provided.
 
----
-
 ## Support
 
 FormSlayer is provided as-is and stability cannot be guaranteed. Bugs and feature requests can be filed as issues, or submitted as a PR for inclusion in the main branch.
-
----
 
 ## License
 
