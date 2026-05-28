@@ -1,5 +1,9 @@
 # FormSlayer
 
+<p align="center">
+  <img src="formslayer_icon.svg" alt="FormSlayer icon" width="96" />
+</p>
+
 A Chrome extension that auto-fills job application forms.
 
 ## How It Works
