@@ -1,6 +1,7 @@
 (() => {
 const CONTENT_SCRIPT_VERSION = "veteran-status-phrases-v1";
 
+// Profile field config
 const fieldMap = {
   firstName:   ["first name", "first_name", "fname", "given name", "legal first", "preferred first"],
   lastName:    ["last name", "last_name", "lname", "surname", "family name", "legal last"],
@@ -25,6 +26,7 @@ const fieldMap = {
   priorCompanyRelationship: ["have you ever worked at", "have you ever worked for", "previously worked at any", "previously worked at", "previously been directly employed", "been directly employed", "directly employed by", "worked at any entity", "do you currently work at", "do you currently work for", "have you ever applied", "ever applied to", "ever applied at", "previously applied", "worked here before", "prior employment with"]
 };
 
+// Travel availability normalization
 function normalizeTravelBucket(value) {
   if (!value) return null;
   const str = String(value).toLowerCase();
@@ -68,6 +70,7 @@ function bucketFromText(text) {
   return "75-100%";
 }
 
+// Label and DOM discovery
 function cleanLabelText(text) {
   if (!text) return "";
   const cleaned = String(text).toLowerCase().replace(/\s+/g, " ").trim();
@@ -189,6 +192,7 @@ const REQUIRED_MARKER_STYLE_ID = "formslayer-required-marker-style";
 const REQUIRED_MARKER_CLASS = "formslayer-required-marker-target";
 const REQUIRED_MARKER_ATTR = "data-formslayer-required-marker-target";
 
+// Required field markers and jump state
 function forEachChoice(callback) {
   document.querySelectorAll(CHOICE_SELECTOR).forEach(callback);
 }
@@ -365,10 +369,6 @@ function getChoiceGroup(el) {
     .filter(candidate => candidate.name === el.name && candidate.form === el.form);
 }
 
-function collectUnfilledRequiredFields(fields = collectRequiredCandidates()) {
-  return collectRequiredFieldState(fields).unansweredTargets;
-}
-
 function refreshRequiredJumpState(fields) {
   const state = collectRequiredFieldState(fields);
   requiredJumpState.fields = state.unansweredTargets;
@@ -471,6 +471,7 @@ function jumpToNextRequiredField() {
   return { jumped: true, requiredRemaining: remaining, requiredTotal: state.total };
 }
 
+// Form readiness and profile matching
 function whenFormReady(run, maxWaitMs = 8000) {
   let debounceTimer;
   let maxTimer;
@@ -570,6 +571,7 @@ function matchField(el) {
   return null;
 }
 
+// Question detectors and setting answers
 function isYearsExperienceQuantityQuestion(text) {
   if (!text) return false;
   const normalized = String(text).toLowerCase().replace(/\s+/g, " ");
@@ -772,6 +774,7 @@ function normalizeNumberInputValue(value) {
   return match ? match[0] : "";
 }
 
+// Native input and select fill helpers
 function fillInput(el, value) {
   const stringValue = value == null ? "" : String(value).trim();
   el.focus();
@@ -981,6 +984,7 @@ function getSettingComboboxHint(key, answer) {
   return answer;
 }
 
+// Combobox and phone widgets
 function setSelectOption(el, matcher) {
   const opt = [...el.options].find(matcher);
   if (!opt) return false;
@@ -1467,6 +1471,7 @@ const stateNamesToAbbr = Object.fromEntries(
   Object.entries(stateAliases).map(([abbr, name]) => [name, abbr])
 );
 
+// Location and residency helpers
 function getStateMatchValues(value) {
   const normalized = String(value || "").toLowerCase().trim();
   const values = [normalized];
@@ -1507,6 +1512,7 @@ function isRelocateIfNotInLocationQuestion(text) {
   );
 }
 
+// Fill orchestration
 async function runFill(data, options = {}) {
   if (typeof options.showRequiredMarkers === "boolean") {
     requiredMarkerState.enabled = options.showRequiredMarkers;
@@ -1893,6 +1899,7 @@ async function runFill(data, options = {}) {
   };
 }
 
+// Message bootstrap
 function onFillMessage(msg, _sender, sendResponse) {
   if (msg.action === "ping") {
     sendResponse({ ok: true, version: CONTENT_SCRIPT_VERSION });
