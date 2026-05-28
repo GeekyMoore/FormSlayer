@@ -682,6 +682,13 @@ function workAuthNoOption(label, value) {
   return /not authorized|not eligible|no authorization|require sponsorship|need sponsorship/.test(l);
 }
 
+function normalizeNumberInputValue(value) {
+  const normalized = String(value || "").replace(/[$,\s]/g, "").trim();
+  if (/^-?\d+(\.\d+)?$/.test(normalized)) return normalized;
+  const match = normalized.match(/-?\d+(\.\d+)?/);
+  return match ? match[0] : "";
+}
+
 function fillInput(el, value) {
   const stringValue = value == null ? "" : String(value).trim();
   el.focus();
@@ -692,6 +699,9 @@ function fillInput(el, value) {
     el.blur();
     return;
   }
+  const inputValue = (el.type || "").toLowerCase() === "number"
+    ? normalizeNumberInputValue(stringValue)
+    : stringValue;
   const proto = el.tagName === "TEXTAREA"
     ? window.HTMLTextAreaElement.prototype
     : window.HTMLInputElement.prototype;
@@ -699,15 +709,15 @@ function fillInput(el, value) {
 
   if (el._valueTracker) el._valueTracker.setValue("");
   if (valueSetter) {
-    valueSetter.call(el, stringValue);
+    valueSetter.call(el, inputValue);
   } else {
-    el.value = stringValue;
+    el.value = inputValue;
   }
   el.dispatchEvent(new InputEvent("input", {
     bubbles: true,
     cancelable: true,
     inputType: "insertText",
-    data: stringValue
+    data: inputValue
   }));
   el.dispatchEvent(new Event("change", { bubbles: true }));
   el.blur();
