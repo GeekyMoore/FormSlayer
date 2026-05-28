@@ -23,7 +23,8 @@
     .section { border: 1px solid #ddd; border-radius: 6px; margin-top: 8px; background: #fff; overflow: hidden; }
     .section summary { padding: 8px 10px; font-size: 13px; font-weight: 600; color: #333; cursor: pointer; background: #f7f7f7; }
     .section-content { padding: 0 10px 10px; }
-    .section-content label:first-child { margin-top: 10px; }
+    select[multiple] { min-height: 72px; }
+    .field-hint { font-size: 11px; color: #777; margin-top: 4px; }
   </style>
 </head>
 <body>
@@ -258,6 +259,14 @@
         <option value="yes">Yes</option>
         <option value="no">No</option>
       </select>
+
+      <label>Work Environment</label>
+      <select id="workEnvironment" multiple size="3">
+        <option value="onsite">Onsite</option>
+        <option value="hybrid">Hybrid</option>
+        <option value="remote">Remote</option>
+      </select>
+      <div class="field-hint">Select one or more. Leave unselected to skip.</div>
     </div>
   </details>
 

@@ -1,4 +1,5 @@
-const fields = ["firstName","lastName","preferredName","email","phone","address","city","state","country","zip","linkedin","website","jobTitle","employer","salary","travelAvailability","relocationWillingness","familyWorksAtCompany","priorCompanyRelationship","workAuthorization","gender","race","disability","veteran","educationLevel","startDate","coverLetter"];
+const fields = ["firstName","lastName","preferredName","email","phone","address","city","state","country","zip","linkedin","website","jobTitle","employer","salary","travelAvailability","relocationWillingness","familyWorksAtCompany","priorCompanyRelationship","workAuthorization","workEnvironment","gender","race","disability","veteran","educationLevel","startDate","coverLetter"];
+const multiSelectFields = ["workEnvironment"];
 const EXPECTED_CONTENT_VERSION = "veteran-status-phrases-v1";
 const SHOW_REQUIRED_MARKERS_KEY = "showRequiredMarkers";
 let requiredFrameIds = [];
@@ -27,7 +28,14 @@ function syncRequiredStatusFromFrames() {
 // Load saved settings
 chrome.storage.sync.get(fields, (data) => {
   fields.forEach(f => {
-    if (data[f]) document.getElementById(f).value = data[f];
+    const el = document.getElementById(f);
+    if (!el) return;
+    if (multiSelectFields.includes(f)) {
+      const values = String(data[f] || "").split(",").map(v => v.trim()).filter(Boolean);
+      [...el.options].forEach(opt => { opt.selected = values.includes(opt.value); });
+      return;
+    }
+    if (data[f]) el.value = data[f];
   });
 });
 
@@ -38,7 +46,14 @@ chrome.storage.sync.get({ [SHOW_REQUIRED_MARKERS_KEY]: true }, (data) => {
 // Save
 document.getElementById("saveBtn").addEventListener("click", () => {
   const data = {};
-  fields.forEach(f => data[f] = document.getElementById(f).value);
+  fields.forEach(f => {
+    const el = document.getElementById(f);
+    if (multiSelectFields.includes(f)) {
+      data[f] = [...el.selectedOptions].map(opt => opt.value).join(",");
+      return;
+    }
+    data[f] = el.value;
+  });
   chrome.storage.sync.set(data, () => {
     document.getElementById("status").textContent = "Saved!";
     setTimeout(() => document.getElementById("status").textContent = "", 2000);
@@ -57,6 +72,23 @@ function injectContentScript(tabId, callback) {
     { target: { tabId, allFrames: true }, files: ["state-aliases.js", "area-code-aliases.js", "content.js"] },
     callback
   );
+}
+
+function ensureContentScript(tabId, callback) {
+  messageAllFrames(tabId, { action: "ping" }, (err, responses) => {
+    const hasMatchingVersion = !err && responses.some(r => r?.ok && r.version === EXPECTED_CONTENT_VERSION);
+    if (hasMatchingVersion) {
+      callback(null);
+      return;
+    }
+    injectContentScript(tabId, () => {
+      if (chrome.runtime.lastError) {
+        callback(chrome.runtime.lastError);
+        return;
+      }
+      setTimeout(() => callback(null), 150);
+    });
+  });
 }
 
 function messageAllFrames(tabId, message, callback) {
@@ -166,19 +198,12 @@ document.getElementById("fillBtn").addEventListener("click", () => {
         setStatus("Open the job application page, then try again.", true);
         return;
       }
-      messageAllFrames(tab.id, { action: "ping" }, (err, responses) => {
-        const hasMatchingVersion = !err && responses.some(r => r?.ok && r.version === EXPECTED_CONTENT_VERSION);
-        if (hasMatchingVersion) {
-          sendFillToTab(tab.id, data);
+      ensureContentScript(tab.id, (err) => {
+        if (err) {
+          setStatus("Can't fill this page - refresh it and try again.", true);
           return;
         }
-        injectContentScript(tab.id, () => {
-          if (chrome.runtime.lastError) {
-            setStatus("Can't fill this page - refresh it and try again.", true);
-            return;
-          }
-          setTimeout(() => sendFillToTab(tab.id, data), 150);
-        });
+        sendFillToTab(tab.id, data);
       });
     });
   });
@@ -190,7 +215,13 @@ document.getElementById("showRequiredMarkers").addEventListener("change", () => 
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
     const tab = tabs[0];
     if (!tab?.id || !tab.url || tab.url.startsWith("chrome:") || tab.url.startsWith("edge:")) return;
-    sendMarkerPreferenceToTab(tab.id, enabled);
+    ensureContentScript(tab.id, (err) => {
+      if (err) {
+        setStatus("Can't update markers on this page - refresh it and try again.", true);
+        return;
+      }
+      sendMarkerPreferenceToTab(tab.id, enabled);
+    });
   });
 });
 

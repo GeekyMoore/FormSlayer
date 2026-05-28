@@ -38,11 +38,11 @@ Used so the popup can act on the tab where the user chooses to fill a form.
 
 ### `scripting`
 
-Used to inject the content script into the current page and its frames when needed.
+Used to inject the form-filling script into the current page and its frames when the user chooses to fill a form or manage required-field markers.
 
 ### `<all_urls>`
 
-Used because job application forms can appear on many different domains. FormSlayer only fills forms when the user clicks Fill This Form.
+Used because job application forms can appear across many different domains and can be embedded in frames from job application providers. FormSlayer no longer loads its content script automatically on every page; it injects form-filling code only after the user opens the popup and clicks Fill This Form or uses marker controls.
 
 ## Release ZIP
 
@@ -53,6 +53,7 @@ rm -f formslayer-chrome-store.zip
 zip -r formslayer-chrome-store.zip \
   manifest.json \
   state-aliases.js \
+  area-code-aliases.js \
   content.js \
   popup.html \
   popup.js \

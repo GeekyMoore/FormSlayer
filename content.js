@@ -16,12 +16,12 @@ const fieldMap = {
   jobTitle:    ["job title", "current title", "recent job title", "position", "current position"],
   employer:    ["employer", "company", "company name", "recent employer", "current employer", "current company", "organization"],
   preferredName: ["preferred name", "preferred first name", "goes by", "nickname", "full name", "fullname", "name"],
-  salary:      ["salary", "compensation", "expected salary", "salary expectation", "pay expectation", "salary expectations", "desired annual base salary", "annual base salary", "desired base salary", "base salary"],
+  salary:      ["salary", "compensation", "compensation requirements", "expected salary", "salary expectation", "pay expectation", "salary expectations", "desired annual base salary", "annual base salary", "desired base salary", "base salary"],
   travelAvailability: ["travel availability", "willingness to travel", "travel requirement", "travel percentage", "percent travel", "% travel", "travel (percent)", "travel up to"],
   educationLevel: ["education", "education level", "highest education", "degree", "highest degree"],
   startDate:   ["start date", "available to start", "when can you start", "availability", "available start"],
   coverLetter: ["cover letter"],
-  familyWorksAtCompany: ["anyone in your family", "in your family currently work", "family member employed", "family member work", "know anyone who works", "relative employed", "related to an employee", "former employee at", "currently employed by a company who uses", "employed by a company who uses", "affiliated brands"],
+  familyWorksAtCompany: ["anyone in your family", "in your family currently work", "family member employed", "family member work", "know anyone who works", "relative employed", "related to an employee", "related to anyone", "former employee at", "currently employed by a company who uses", "employed by a company who uses", "affiliated brands"],
   priorCompanyRelationship: ["have you ever worked at", "have you ever worked for", "previously worked at any", "previously worked at", "previously been directly employed", "been directly employed", "directly employed by", "worked at any entity", "do you currently work at", "do you currently work for", "have you ever applied", "ever applied to", "ever applied at", "previously applied", "worked here before", "prior employment with"]
 };
 
@@ -541,9 +541,13 @@ function matchField(el) {
     }
     if (keywords.some(k => keywordMatches(haystack, k))) {
       if (key === "country" && isPhoneDialCodeField(el)) continue;
+      if (key === "jobTitle" && fieldMap.salary.some(k => keywordMatches(haystack, k))) continue;
       if (
         (key === "firstName" || key === "lastName" || key === "preferredName") &&
-        (isReferrerNameQuestion(haystack) || isReferrerNameQuestion(getFieldQuestionText(el)))
+        (isReferrerNameQuestion(haystack) ||
+          isReferrerNameQuestion(getFieldQuestionText(el)) ||
+          isRelationshipFollowUpQuestion(haystack) ||
+          isRelationshipFollowUpQuestion(getFieldQuestionText(el)))
       ) {
         continue;
       }
@@ -553,7 +557,10 @@ function matchField(el) {
     if (hints?.some(h => keywordMatches(haystack, h))) {
       if (
         (key === "firstName" || key === "lastName" || key === "preferredName") &&
-        (isReferrerNameQuestion(haystack) || isReferrerNameQuestion(getFieldQuestionText(el)))
+        (isReferrerNameQuestion(haystack) ||
+          isReferrerNameQuestion(getFieldQuestionText(el)) ||
+          isRelationshipFollowUpQuestion(haystack) ||
+          isRelationshipFollowUpQuestion(getFieldQuestionText(el)))
       ) {
         continue;
       }
@@ -580,8 +587,15 @@ function isReferrerNameQuestion(text) {
     t.includes("referral") ||
     /\breferred\b/.test(t) ||
     t.includes("who referred") ||
+    (t.includes("referrer") && t.includes("name")) ||
     (t.includes("refer") && (t.includes("associate") || t.includes("employee")) && t.includes("name"))
   );
+}
+
+function isRelationshipFollowUpQuestion(text) {
+  if (!text) return false;
+  const t = String(text).toLowerCase();
+  return t.includes("what is your relationship") || (t.includes("if yes") && t.includes("relationship"));
 }
 
 function getQuestionText(el) {
@@ -606,6 +620,32 @@ function getNearbyQuestionText(el) {
     }
   }
   return [...new Set(parts.filter(Boolean))].join(" ");
+}
+
+function getChoiceQuestionPrompt(el) {
+  let node = el;
+  while (node && node !== document.body) {
+    const li = node.closest("li");
+    if (li) {
+      const text = cleanLabelText(li.innerText);
+      if (text && text.includes("?")) return text;
+      const list = li.parentElement;
+      if (list) {
+        for (const sibling of list.children) {
+          if (sibling.tagName !== "LI") continue;
+          const siblingText = cleanLabelText(sibling.innerText);
+          if (siblingText && siblingText.includes("?")) return siblingText;
+        }
+      }
+    }
+    node = node.parentElement;
+  }
+  const scoped = el.closest("fieldset,[role=group],.question,.form-question,.form-group");
+  if (scoped) {
+    const text = cleanLabelText(scoped.innerText);
+    if (text) return text;
+  }
+  return getLabel(el);
 }
 
 function isWorkAuthQuestion(text) {
@@ -652,10 +692,28 @@ function isSponsorshipRequiredQuestion(text) {
   if ((t.includes("sponsor") || t.includes("sponsorship")) && t.includes("country you currently reside")) {
     return true;
   }
-  if (/require sponsorship to work in the country/.test(t)) {
-    return true;
-  }
   return false;
+}
+
+function isWorkAuthStatusPickerQuestion(text) {
+  if (!text) return false;
+  const t = text.toLowerCase();
+  return (
+    /what is your current work authorization/.test(t) ||
+    /current work authorization in/.test(t) ||
+    (/work authorization/.test(t) && /for any employer|require sponsorship to work in the country/.test(t))
+  );
+}
+
+function workAuthStatusOptionMatches(workAuthPref, optionLabel) {
+  const l = String(optionLabel || "").toLowerCase();
+  const pref = String(workAuthPref || "").toLowerCase();
+  if (pref === "yes") {
+    if (/for any employer/.test(l)) return true;
+    return l.includes("authorized") && !/require sponsorship|unknown/.test(l);
+  }
+  if (/require sponsorship/.test(l)) return true;
+  return /status.*unknown|unknown.*status/.test(l);
 }
 
 function isWorkAuthYesNoQuestion(text) {
@@ -786,6 +844,59 @@ function isEthnicityYesRacePref(pref) {
   return String(pref || "").toLowerCase().trim() === "hispanic";
 }
 
+function isWorkEnvironmentQuestion(text) {
+  const t = String(text || "").toLowerCase();
+  if (t.includes("sponsorship questions")) return false;
+  if (t.includes("relocate") && !t.includes("remote")) return false;
+  return (
+    /work in (the )?office/.test(t) ||
+    /willing to work (in )?(the )?office/.test(t) ||
+    /work on-site|work onsite|on-site work/.test(t) ||
+    (/hybrid/.test(t) && (t.includes("work") || t.includes("office") || t.includes("remote"))) ||
+    /remote work|work remotely|work from home/.test(t) ||
+    t.includes("work environment") ||
+    t.includes("preferred work location") ||
+    t.includes("work arrangement")
+  );
+}
+
+function isWorkEnvironmentYesNoQuestion(text) {
+  const t = String(text || "").toLowerCase();
+  if (!isWorkEnvironmentQuestion(t)) return false;
+  return (
+    /willing to work|are you willing|work in (the )?office/.test(t) ||
+    (t.includes("remote") && /\b(yes|no)\b/.test(t))
+  );
+}
+
+function normalizeWorkEnvironmentPrefs(data) {
+  const raw = data.workEnvironment;
+  if (Array.isArray(raw)) {
+    return raw.map(v => String(v).toLowerCase().trim()).filter(Boolean);
+  }
+  return String(raw || "").split(",").map(v => v.toLowerCase().trim()).filter(Boolean);
+}
+
+function workEnvironmentAcceptsInOffice(prefs) {
+  return prefs.some(pref => pref === "onsite" || pref === "hybrid");
+}
+
+function workEnvironmentYesNoAnswer(prefs, questionText) {
+  if (!prefs.length || !isWorkEnvironmentYesNoQuestion(questionText)) return null;
+  return workEnvironmentAcceptsInOffice(prefs) ? "yes" : "no";
+}
+
+function workEnvironmentPrefPriority(pref) {
+  if (pref === "hybrid") return 0;
+  if (pref === "onsite") return 1;
+  if (pref === "remote") return 2;
+  return 3;
+}
+
+function orderedWorkEnvironmentPrefs(prefs) {
+  return [...prefs].sort((a, b) => workEnvironmentPrefPriority(a) - workEnvironmentPrefPriority(b));
+}
+
 function getSettingAnswerText(key, pref, questionText) {
   if (key === "race" && isEthnicityYesNoQuestion(questionText)) {
     if (String(pref || "").toLowerCase().includes("prefer not")) return "decline";
@@ -825,6 +936,20 @@ function optionMatchesSetting(answer, label, value, key) {
         normalizedLabel.includes("have a disability") &&
         !normalizedLabel.includes("do not have a disability")
       );
+    }
+  }
+  if (key === "workEnvironment") {
+    if (answer === "yes" || answer === "no") {
+      return textMatchesChoicePreference(answer, normalizedLabel, normalizedValue);
+    }
+    if (answer === "onsite") {
+      return /on-?\s*site|in\s*office|in-office/.test(normalizedLabel);
+    }
+    if (answer === "hybrid") {
+      return normalizedLabel.includes("hybrid");
+    }
+    if (answer === "remote") {
+      return normalizedLabel.includes("remote") || normalizedLabel.includes("work from home");
     }
   }
   if (textMatchesChoicePreference(answer, normalizedLabel, normalizedValue)) return true;
@@ -1350,6 +1475,38 @@ function getStateMatchValues(value) {
   return [...new Set(values.filter(Boolean))];
 }
 
+function parseResidencyLocation(text) {
+  const t = String(text || "").toLowerCase();
+  const match = t.match(/\bare you in ([^?\n]+)/);
+  if (!match) return null;
+  return match[1].replace(/\*+/g, "").trim();
+}
+
+function isResidencyLocationQuestion(text) {
+  const t = String(text || "").toLowerCase().trim();
+  if (!/\bare you in .+\?/.test(t)) return false;
+  if (isSponsorshipRequiredQuestion(t) || isWorkAuthQuestion(t)) return false;
+  if (t.includes("will you now") || t.includes("will you ever")) return false;
+  return true;
+}
+
+function userIsInLocation(data, locationText) {
+  const location = String(locationText || "").toLowerCase().trim();
+  if (!location) return false;
+  const city = String(data.city || "").toLowerCase().trim();
+  if (city && (location.includes(city) || city.includes(location))) return true;
+  const stateValues = getStateMatchValues(data.state);
+  return stateValues.some(value => location.includes(value) || value.includes(location));
+}
+
+function isRelocateIfNotInLocationQuestion(text) {
+  const t = String(text || "").toLowerCase();
+  return (
+    (t.includes("if you are not in") || t.includes("if you're not in")) &&
+    t.includes("relocate")
+  );
+}
+
 async function runFill(data, options = {}) {
   if (typeof options.showRequiredMarkers === "boolean") {
     requiredMarkerState.enabled = options.showRequiredMarkers;
@@ -1432,14 +1589,28 @@ async function runFill(data, options = {}) {
   const workAuthPref = normalizePreference(data, "workAuthorization");
   if (workAuthPref) {
     forEachChoice(el => {
-      const scopedText = getFieldQuestionText(el);
-      const questionText = shouldApplyWorkAuthSetting(scopedText) ? scopedText : getNearbyQuestionText(el);
+      const questionText = getChoiceQuestionPrompt(el);
       if (!shouldApplyWorkAuthSetting(questionText)) return;
-      const groupKey = questionText.slice(0, 120) || el.name;
+      const groupKey = el.name || questionText.slice(0, 120);
       if (workAuthClickedGroups.has(groupKey)) return;
-      const answer = workAuthAnswerForQuestion(workAuthPref, questionText);
       const { label } = getChoiceContext(el);
       const value = el.value || "";
+      if (isWorkAuthStatusPickerQuestion(questionText)) {
+        let optionText = String(el.value || "").trim();
+        if (optionText.startsWith("{")) {
+          try {
+            const parsed = JSON.parse(optionText);
+            optionText = String(parsed.text || parsed.label || optionText).trim();
+          } catch (_) {}
+        }
+        if (!optionText) optionText = (el.closest("li")?.innerText || label).trim();
+        if (workAuthStatusOptionMatches(workAuthPref, optionText)) {
+          el.click();
+          workAuthClickedGroups.add(groupKey);
+        }
+        return;
+      }
+      const answer = workAuthAnswerForQuestion(workAuthPref, questionText);
       const matches = answer === "yes"
         ? workAuthYesOption(label, value)
         : workAuthNoOption(label, value);
@@ -1474,10 +1645,41 @@ async function runFill(data, options = {}) {
     }
   }
 
+  // "Are you in [location]?" — answer Yes/No from saved city/state.
+  const residencyClickedGroups = new Set();
+  if (data.state || data.city) {
+    forEachChoice(el => {
+      const questionText = getChoiceQuestionPrompt(el);
+      if (!isResidencyLocationQuestion(questionText)) return;
+      const location = parseResidencyLocation(questionText);
+      if (!location) return;
+      const groupKey = el.name || questionText.slice(0, 120);
+      if (residencyClickedGroups.has(groupKey)) return;
+      const answer = userIsInLocation(data, location) ? "yes" : "no";
+      const { label, value } = getChoiceContext(el);
+      if (textMatchesChoicePreference(answer, label, value)) {
+        el.click();
+        residencyClickedGroups.add(groupKey);
+      }
+    });
+  }
+
+  const relocatePref = normalizePreference(data, "relocationWillingness");
+  if (relocatePref) {
+    document.querySelectorAll("input[type=text], textarea").forEach(el => {
+      const questionText = getLabel(el) || getFieldQuestionText(el);
+      if (!isRelocateIfNotInLocationQuestion(questionText)) return;
+      const location = parseResidencyLocation(questionText);
+      if (location && userIsInLocation(data, location)) return;
+      fillInput(el, relocatePref === "yes" ? "Yes" : "No");
+    });
+  }
+
   const choiceSettings = [
     {
       key: "relocationWillingness",
-      matchesQuestion: (label, parentText) => parentText.includes("relocate") || label.includes("relocate")
+      matchesQuestion: (label, questionText) =>
+        questionText.includes("relocate") || questionText.includes("plan to relocate")
     },
     {
       key: "gender",
@@ -1505,14 +1707,73 @@ async function runFill(data, options = {}) {
     }
   ];
 
+  async function applyWorkEnvironmentSetting() {
+    const prefs = normalizeWorkEnvironmentPrefs(data);
+    if (!prefs.length) return;
+    const clickedGroups = new Set();
+    forEachChoice(el => {
+      const questionText = getChoiceQuestionPrompt(el);
+      if (!isWorkEnvironmentQuestion(questionText)) return;
+      const { label, value } = getChoiceContext(el);
+      if (el.type === "checkbox") {
+        if (prefs.some(pref => optionMatchesSetting(pref, label, value, "workEnvironment"))) {
+          if (!el.checked) el.click();
+        }
+        return;
+      }
+      const groupKey = el.name || questionText.slice(0, 120);
+      if (clickedGroups.has(groupKey)) return;
+      const yesNoAnswer = workEnvironmentYesNoAnswer(prefs, questionText);
+      if (yesNoAnswer) {
+        if (textMatchesChoicePreference(yesNoAnswer, label, value)) {
+          el.click();
+          clickedGroups.add(groupKey);
+        }
+        return;
+      }
+      for (const pref of orderedWorkEnvironmentPrefs(prefs)) {
+        if (optionMatchesSetting(pref, label, value, "workEnvironment")) {
+          el.click();
+          clickedGroups.add(groupKey);
+          break;
+        }
+      }
+    });
+    document.querySelectorAll("select").forEach(el => {
+      const label = getLabel(el);
+      if (!isWorkEnvironmentQuestion(label)) return;
+      const yesNoAnswer = workEnvironmentYesNoAnswer(prefs, label);
+      if (yesNoAnswer) {
+        setSelectOption(el, o => optionMatchesSetting(yesNoAnswer, o.text, o.value, "workEnvironment"));
+        return;
+      }
+      for (const pref of orderedWorkEnvironmentPrefs(prefs)) {
+        if (setSelectOption(el, o => optionMatchesSetting(pref, o.text, o.value, "workEnvironment"))) break;
+      }
+    });
+    for (const el of document.querySelectorAll("input.select__input[role='combobox']")) {
+      const label = getLabel(el);
+      if (!isWorkEnvironmentQuestion(label)) continue;
+      const yesNoAnswer = workEnvironmentYesNoAnswer(prefs, label);
+      if (yesNoAnswer) {
+        await setComboboxOption(el, yesNoAnswer, "workEnvironment");
+        continue;
+      }
+      for (const pref of orderedWorkEnvironmentPrefs(prefs)) {
+        if (await setComboboxOption(el, pref, "workEnvironment")) break;
+      }
+    }
+  }
+
   async function applyChoiceSettingsPass() {
     for (const { key, matchesQuestion } of choiceSettings) {
       const pref = normalizePreference(data, key);
       if (!pref) continue;
       forEachChoice(el => {
-        const { label, parentText, value } = getChoiceContext(el);
-        if (!matchesQuestion(label, parentText)) return;
-        const answer = getSettingAnswerText(key, pref, parentText || label);
+        const { label, value } = getChoiceContext(el);
+        const questionText = getChoiceQuestionPrompt(el);
+        if (!matchesQuestion(label, questionText)) return;
+        const answer = getSettingAnswerText(key, pref, questionText || label);
         if (optionMatchesSetting(answer, label, value, key)) el.click();
       });
       document.querySelectorAll("select").forEach(el => {
@@ -1532,6 +1793,7 @@ async function runFill(data, options = {}) {
 
   // Some forms reveal dependent demographic fields after a prior answer (e.g. race after Hispanic/Latino).
   // Run a second pass so newly revealed follow-up questions are filled in the same click.
+  await applyWorkEnvironmentSetting();
   await applyChoiceSettingsPass();
   await applyChoiceSettingsPass();
 
@@ -1566,6 +1828,8 @@ async function runFill(data, options = {}) {
     const key = matchField(el);
     if (!key || !data[key] || key === "familyWorksAtCompany" || key === "priorCompanyRelationship") continue;
     if (key === "country" && isPhoneDialCodeField(el)) continue;
+    const inputType = (el.type || "").toLowerCase();
+    if (inputType === "radio" || inputType === "checkbox") continue;
     mainLoopFilled++;
     const role = (el.getAttribute("role") || "").toLowerCase();
     const skippedIti = role === "combobox" && !el.classList.contains("select__input") && Boolean(el.closest(".iti"));
