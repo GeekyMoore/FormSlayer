@@ -1,5 +1,6 @@
 (() => {
-const CONTENT_SCRIPT_VERSION = "skip-hidden-fill-v1";
+const CONTENT_SCRIPT_VERSION = "veteran-status-phrases-v1";
+
 const fieldMap = {
   firstName:   ["first name", "first_name", "fname", "given name", "legal first", "preferred first"],
   lastName:    ["last name", "last_name", "lname", "surname", "family name", "legal last"],
@@ -260,6 +261,11 @@ function isFieldAnswered(el) {
     return Boolean(value) && !/^(select|choose|please select|not set)\b/.test(selectedText);
   }
   if ((el.getAttribute("role") || "").toLowerCase() === "combobox") {
+    if (isReactSelectCombobox(el)) {
+      if (getReactSelectDisplayValue(el)) return true;
+      const native = findReactSelectNativeInput(el);
+      if (native && String(native.value || "").trim() && !native.validity?.valueMissing) return true;
+    }
     const value = String(el.value || el.getAttribute("aria-valuetext") || el.textContent || "").trim();
     return value !== "";
   }
@@ -534,6 +540,7 @@ function matchField(el) {
       continue;
     }
     if (keywords.some(k => keywordMatches(haystack, k))) {
+      if (key === "country" && isPhoneDialCodeField(el)) continue;
       if (
         (key === "firstName" || key === "lastName" || key === "preferredName") &&
         (isReferrerNameQuestion(haystack) || isReferrerNameQuestion(getFieldQuestionText(el)))
@@ -755,13 +762,98 @@ function getChoiceContext(el) {
 
 function clickChoiceIfMatches(el, pref, label, value) {
   if (!pref) return false;
-  const escapedPref = pref.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
-  const prefPattern = new RegExp(`(^|[^a-z0-9])${escapedPref}([^a-z0-9]|$)`);
-  if (prefPattern.test(label) || value === pref) {
+  if (textMatchesChoicePreference(pref, label, value)) {
     el.click();
     return true;
   }
   return false;
+}
+
+function textMatchesChoicePreference(pref, label, value) {
+  if (!pref) return false;
+  const escapedPref = pref.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
+  const prefPattern = new RegExp(`(^|[^a-z0-9])${escapedPref}([^a-z0-9]|$)`);
+  return prefPattern.test(label) || value === pref;
+}
+
+function isEthnicityYesNoQuestion(text) {
+  const t = String(text || "").toLowerCase();
+  if (!/\bhispanic\b/.test(t) && !/\blatino\b/.test(t)) return false;
+  return /\bare you\b/.test(t) || /\bdo you\b/.test(t);
+}
+
+function isEthnicityYesRacePref(pref) {
+  return String(pref || "").toLowerCase().trim() === "hispanic";
+}
+
+function getSettingAnswerText(key, pref, questionText) {
+  if (key === "race" && isEthnicityYesNoQuestion(questionText)) {
+    if (String(pref || "").toLowerCase().includes("prefer not")) return "decline";
+    return isEthnicityYesRacePref(pref) ? "yes" : "no";
+  }
+  return pref;
+}
+
+function optionMatchesSetting(answer, label, value, key) {
+  if (!answer) return false;
+  const normalizedLabel = String(label || "").toLowerCase();
+  const normalizedValue = String(value || "").toLowerCase();
+  if (key === "veteran") {
+    if (answer === "no") {
+      return (
+        normalizedLabel.includes("not a protected veteran") ||
+        normalizedLabel.includes("i am not a protected") ||
+        normalizedLabel.includes("am not a protected veteran")
+      );
+    }
+    if (answer === "yes") {
+      return (
+        normalizedLabel.includes("identify as one or more") ||
+        (normalizedLabel.includes("protected veteran") && !normalizedLabel.includes("not a protected"))
+      );
+    }
+  }
+  if (key === "disability") {
+    if (answer === "no") {
+      return (
+        normalizedLabel.includes("do not have a disability") ||
+        normalizedLabel.includes("no, i do not have a disability")
+      );
+    }
+    if (answer === "yes") {
+      return (
+        normalizedLabel.includes("have a disability") &&
+        !normalizedLabel.includes("do not have a disability")
+      );
+    }
+  }
+  if (textMatchesChoicePreference(answer, normalizedLabel, normalizedValue)) return true;
+  if (answer.includes("prefer not")) {
+    return (
+      normalizedLabel.includes("prefer not") ||
+      normalizedLabel.includes("decline") ||
+      normalizedLabel.includes("do not wish") ||
+      normalizedLabel.includes("don't wish") ||
+      normalizedLabel.includes("do not want to answer") ||
+      normalizedValue.includes("prefer not") ||
+      normalizedValue.includes("decline")
+    );
+  }
+  return false;
+}
+
+function getSettingComboboxHint(key, answer) {
+  if (key === "veteran") {
+    if (answer === "no") return "not a protected veteran";
+    if (answer === "yes") return "identify as one or more";
+    if (answer.includes("prefer not")) return "do not wish";
+  }
+  if (key === "disability") {
+    if (answer === "no") return "do not have a disability";
+    if (answer === "yes") return "have a disability";
+    if (answer.includes("prefer not")) return "do not want to answer";
+  }
+  return answer;
 }
 
 function setSelectOption(el, matcher) {
@@ -772,37 +864,477 @@ function setSelectOption(el, matcher) {
   return true;
 }
 
-function dispatchKey(el, key) {
-  el.dispatchEvent(new KeyboardEvent("keydown", {
-    key,
-    code: key,
-    bubbles: true,
-    cancelable: true
-  }));
+function getComboboxInput(el) {
+  return el.tagName === "INPUT" ? el : el.querySelector("input[role='combobox']");
 }
 
-function setComboboxOption(el, text) {
-  const input = el.tagName === "INPUT" ? el : el.querySelector("input[role='combobox']");
-  if (!input) return false;
-  const control = input.closest(".select__control") || input;
+function getReactSelectListbox(input) {
+  const id = input?.id;
+  if (!id) return null;
+  return document.getElementById(`react-select-${id}-listbox`);
+}
+
+const KEY_CODES = { ArrowDown: 40, ArrowUp: 38, Home: 36, Enter: 13, Escape: 27, " ": 32 };
+
+function dispatchKey(el, key) {
+  const keyCode = KEY_CODES[key] || 0;
+  const init = { key, code: key, keyCode, which: keyCode, bubbles: true, cancelable: true, view: window };
+  el.dispatchEvent(new KeyboardEvent("keydown", init));
+  el.dispatchEvent(new KeyboardEvent("keyup", init));
+}
+
+function nextFrame() {
+  return new Promise(resolve => requestAnimationFrame(resolve));
+}
+
+function getReactSelectDisplayValue(input) {
+  const root = input.closest(".select__container") || input.closest(".select");
+  if (!root) return "";
+  const single = root.querySelector(".select__single-value, [class*='single-value']");
+  if (single?.innerText?.trim()) return single.innerText.trim();
+  const placeholder = root.querySelector(".select__placeholder");
+  if (placeholder && placeholder.offsetParent !== null) return "";
+  return "";
+}
+
+function reactSelectMatchesExpected(input, expectedText) {
+  return getReactSelectDisplayValue(input).toLowerCase() === String(expectedText || "").toLowerCase().trim();
+}
+
+function getReactSelectFieldScope(input) {
+  return input.closest(".select__container, .select, .field, .form-group, .question, .application-question, li") || input.parentElement;
+}
+
+function findReactSelectNativeInput(input) {
+  const scope = getReactSelectFieldScope(input);
+  if (!scope) return null;
+  const candidates = [...scope.querySelectorAll("input")].filter(el => {
+    if (el === input) return false;
+    if (el.classList?.contains("select__input")) return false;
+    if ((el.getAttribute("role") || "").toLowerCase() === "combobox") return false;
+    const type = (el.type || "").toLowerCase();
+    return type === "text" || type === "hidden";
+  });
+  return candidates.find(el => el.required || el.hasAttribute("required")) || candidates[0] || null;
+}
+
+function setNativeInputValue(native, value) {
+  if (!native) return;
+  const stringValue = value == null ? "" : String(value);
+  const proto = native.tagName === "SELECT"
+    ? window.HTMLSelectElement.prototype
+    : window.HTMLInputElement.prototype;
+  const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
+  if (native._valueTracker) native._valueTracker.setValue("");
+  if (setter) setter.call(native, stringValue);
+  else native.value = stringValue;
+  native.dispatchEvent(new Event("input", { bubbles: true }));
+  native.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+function syncReactSelectNativeInput(input, optionText, optionValue) {
+  const native = findReactSelectNativeInput(input);
+  if (!native) return { synced: false, nativeFound: false };
+  const value = String(optionValue || optionText || "").trim();
+  if (!value) return { synced: false, nativeFound: true };
+  setNativeInputValue(native, value);
+  return {
+    synced: true,
+    nativeFound: true,
+    valueMissing: Boolean(native.validity?.valueMissing)
+  };
+}
+
+function reactSelectIsCommitted(input, expectedText) {
+  if (expectedText && reactSelectMatchesExpected(input, expectedText)) return true;
+  if (getReactSelectDisplayValue(input)) return true;
+  const native = findReactSelectNativeInput(input);
+  return Boolean(native && String(native.value || "").trim() && !native.validity?.valueMissing);
+}
+
+async function activateReactSelectOption(optionEl) {
+  const clickTarget = optionEl.querySelector(".select__option") || optionEl;
+  clickTarget.scrollIntoView({ block: "nearest" });
+  const init = { bubbles: true, cancelable: true, view: window, buttons: 1, detail: 1 };
+  for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup", "click"]) {
+    const Ctor = type.startsWith("pointer") ? PointerEvent : MouseEvent;
+    clickTarget.dispatchEvent(new Ctor(type, init));
+  }
+  await nextFrame();
+  await nextFrame();
+}
+
+async function typeReactSelectFilter(input, text) {
+  const filterText = String(text || "").trim().slice(0, 24);
+  if (!filterText) return;
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+  input.focus();
+  if (setter) setter.call(input, "");
+  else input.value = "";
+  input.dispatchEvent(new InputEvent("input", { bubbles: true, composed: true, inputType: "deleteContentBackward" }));
+  await nextFrame();
+  if (setter) setter.call(input, filterText);
+  else input.value = filterText;
+  input.dispatchEvent(new InputEvent("input", { bubbles: true, composed: true, inputType: "insertText", data: filterText }));
+  await nextFrame();
+  await nextFrame();
+}
+
+function isPhoneDialCodeField(el) {
+  const iti = el?.closest?.(".iti");
+  if (!iti) return false;
+  return el !== iti.querySelector("input[type='tel']");
+}
+
+function getIntlTelInstance(telInput) {
+  if (telInput?._iti) return telInput._iti;
+  if (window.intlTelInputGlobals?.getInstance) {
+    try {
+      return window.intlTelInputGlobals.getInstance(telInput);
+    } catch (_) {}
+  }
+  return null;
+}
+
+function getPhoneCountryIso(phone, profileCountry) {
+  return window.__formSlayerPhoneLocale?.resolveCountryIso?.(phone, profileCountry) || "us";
+}
+
+function itiOptionMatchesCountry(text, iso2, profileCountry) {
+  const t = String(text || "").toLowerCase().trim();
+  const profileLabel = String(profileCountry || "").toLowerCase().trim();
+  if (profileLabel && t.includes(profileLabel)) return true;
+  if (iso2 === "us" && t.includes("united states")) return true;
+  if (iso2 === "ca" && t.includes("canada")) return true;
+  if (iso2 === "gb" && t.includes("united kingdom")) return true;
+  return false;
+}
+
+function formatPhoneForIti(phoneValue, iso2) {
+  const digits = String(phoneValue || "").replace(/\D/g, "");
+  if (!digits) return "";
+  if (iso2 === "us" || iso2 === "ca") {
+    const national = digits.length === 11 && digits[0] === "1" ? digits.slice(1) : digits;
+    return `+1${national}`;
+  }
+  if (String(phoneValue).trim().startsWith("+")) return String(phoneValue).trim();
+  return `+${digits}`;
+}
+
+function getItiSelectedIso(telInput) {
+  const iti = getIntlTelInstance(telInput);
+  return (iti?.getSelectedCountryData?.()?.iso2 || "").toLowerCase();
+}
+
+async function setIntlTelCountry(itiRoot, telInput, iso2, phoneValue, profileCountry) {
+  const formatted = formatPhoneForIti(phoneValue, iso2);
+  const iti = getIntlTelInstance(telInput);
+  if (iti?.setCountry) {
+    iti.setCountry(iso2);
+    if (formatted && iti.setNumber) iti.setNumber(formatted);
+    return { ok: true, method: "iti-api", selectedIso: getItiSelectedIso(telInput) };
+  }
+  const flagBtn = itiRoot.querySelector(".iti__selected-country, .iti__selected-flag");
+  if (flagBtn) {
+    flagBtn.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, view: window }));
+    flagBtn.click();
+    await nextFrame();
+    await nextFrame();
+  }
+  const searchInput = itiRoot.querySelector(
+    "input[type='search'][role='combobox'], input.iti__search-input, input[id*='iti'][role='combobox']"
+  );
+  if (searchInput) {
+    const hint = String(profileCountry || "").trim();
+    const ok = await selectComboboxOption(
+      searchInput,
+      (text) => itiOptionMatchesCountry(text, iso2, profileCountry),
+      hint
+    );
+    if (ok) {
+      if (formatted && getIntlTelInstance(telInput)?.setNumber) {
+        getIntlTelInstance(telInput).setNumber(formatted);
+      }
+      return { ok: true, method: "iti-search", selectedIso: getItiSelectedIso(telInput) };
+    }
+  }
+  return { ok: false, method: "iti-failed", selectedIso: getItiSelectedIso(telInput) };
+}
+
+function syncPhoneCompanionInputs(telInput) {
+  const scope = getQuestionScope(telInput) || telInput.closest(".field,.form-group,.question");
+  if (!scope) return;
+  const telValue = String(telInput.value || "").trim();
+  if (!telValue) return;
+  [...scope.querySelectorAll("input")].forEach(el => {
+    if (el === telInput) return;
+    const type = (el.type || "").toLowerCase();
+    if (type === "tel" || type === "file") return;
+    if (el.classList?.contains("select__input")) return;
+    if ((el.getAttribute("role") || "").toLowerCase() === "combobox") return;
+    if (!el.required && (el.getAttribute("aria-required") || "").toLowerCase() !== "true") return;
+    if (String(el.value || "").trim()) return;
+    setNativeInputValue(el, telValue);
+  });
+}
+
+function phoneDigitsMatch(have, want) {
+  if (!want) return true;
+  if (!have) return false;
+  return have === want || have.endsWith(want) || want.endsWith(have);
+}
+
+async function fillPhoneInput(el, value, profileCountry) {
+  const itiRoot = el.closest(".iti");
+  const telInput = itiRoot?.querySelector("input[type='tel'], input[type='text']") || el;
+  const iso = getPhoneCountryIso(value, profileCountry);
+  const wantDigits = String(value || "").replace(/\D/g, "");
+
+  if (itiRoot) {
+    await setIntlTelCountry(itiRoot, telInput, iso, value, profileCountry);
+  }
+
+  let haveDigits = String(telInput.value || "").replace(/\D/g, "");
+  if (wantDigits && !phoneDigitsMatch(haveDigits, wantDigits)) {
+    const iti = getIntlTelInstance(telInput);
+    const formatted = formatPhoneForIti(value, iso);
+    if (iti?.setNumber && formatted) iti.setNumber(formatted);
+    haveDigits = String(telInput.value || "").replace(/\D/g, "");
+    if (!phoneDigitsMatch(haveDigits, wantDigits)) fillInput(telInput, value);
+  } else if (!itiRoot && wantDigits) {
+    fillInput(telInput, value);
+  }
+
+  syncPhoneCompanionInputs(telInput);
+  telInput.dispatchEvent(new Event("input", { bubbles: true }));
+  telInput.dispatchEvent(new Event("change", { bubbles: true }));
+  telInput.dispatchEvent(new Event("blur", { bubbles: true }));
+}
+
+function isReactSelectCombobox(input) {
+  return Boolean(input?.classList?.contains("select__input") && input.id);
+}
+
+function openReactSelectMenu(input) {
+  input.scrollIntoView({ block: "center", inline: "nearest" });
+  input.focus();
+  if (input.getAttribute("aria-expanded") === "true") return;
+  const control = input.closest(".select__control");
+  if (control) {
+    control.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, view: window }));
+    control.click();
+  }
+  if (input.getAttribute("aria-expanded") !== "true") {
+    dispatchKey(input, "ArrowDown");
+  }
+  if (input.getAttribute("aria-expanded") !== "true") {
+    input.closest(".select")?.querySelector("button[aria-label='Toggle flyout']")?.click();
+  }
+}
+
+function openCombobox(input) {
+  if (isReactSelectCombobox(input)) {
+    openReactSelectMenu(input);
+    return;
+  }
+  input.scrollIntoView({ block: "center", inline: "nearest" });
+  input.focus();
+  const control = input.closest(".select__control, [class*='select'], [class*='Select']") || input;
   control.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, view: window }));
   control.click();
+}
+
+function readReactSelectListbox(input) {
+  const listbox = getReactSelectListbox(input);
+  if (!listbox) return null;
+  const opts = [...listbox.querySelectorAll("[role='option']")];
+  return opts.length ? { listbox, opts } : null;
+}
+
+function waitForReactSelectListbox(input) {
+  return new Promise(resolve => {
+    let settled = false;
+    let observer;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      observer?.disconnect();
+      resolve(result);
+    };
+    openReactSelectMenu(input);
+    const immediate = readReactSelectListbox(input);
+    if (immediate) {
+      finish(immediate);
+      return;
+    }
+    observer = new MutationObserver(() => {
+      const found = readReactSelectListbox(input);
+      if (found) finish(found);
+    });
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+    let frames = 0;
+    const poll = () => {
+      const found = readReactSelectListbox(input);
+      if (found) {
+        finish(found);
+        return;
+      }
+      frames++;
+      if (frames < 24) requestAnimationFrame(poll);
+      else finish(null);
+    };
+    requestAnimationFrame(poll);
+  });
+}
+
+function getListboxOptions(input) {
+  const reactListbox = getReactSelectListbox(input);
+  if (reactListbox) {
+    const reactOptions = [...reactListbox.querySelectorAll("[role='option']")];
+    if (reactOptions.length) return reactOptions;
+  }
+  const listboxId = input.getAttribute("aria-controls");
+  if (listboxId) {
+    const listbox = document.getElementById(listboxId);
+    if (listbox) {
+      return [...listbox.querySelectorAll("[role='option'], li, [data-value]")];
+    }
+  }
+  const scope = input.closest("fieldset,[role=group],.question,.form-group,.field,.form-question,.select__container,.select") || document;
+  const inScope = [...scope.querySelectorAll("[role='listbox'] [role='option'], [role='option']")];
+  if (inScope.length) return inScope;
+  const visible = [...document.querySelectorAll("[role='listbox'] [role='option'], [role='option']")].filter(opt => {
+    const rect = opt.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  });
+  return visible;
+}
+
+function getActiveListboxOptionIndex(input, opts) {
+  const activeId = input.getAttribute("aria-activedescendant");
+  if (!activeId) return -1;
+  return opts.findIndex(o => o.id === activeId);
+}
+
+function findReactSelectOptionIndex(opts, matcher) {
+  return opts.findIndex(opt => {
+    const text = (opt.innerText || opt.textContent || "").trim();
+    const value = (opt.getAttribute("data-value") || opt.id || "").toLowerCase();
+    return matcher(text, value);
+  });
+}
+
+async function selectReactSelectOption(input, matcher, filterHint = "") {
+  if (input.getAttribute("aria-expanded") === "true") {
+    dispatchKey(input, "Escape");
+    await nextFrame();
+  }
+
+  let found = await waitForReactSelectListbox(input);
+  let opts = found?.opts || [];
+  let targetIndex = findReactSelectOptionIndex(opts, matcher);
+
+  if (targetIndex < 0 && filterHint) {
+    await typeReactSelectFilter(input, filterHint);
+    found = readReactSelectListbox(input) || found;
+    opts = found?.opts || opts;
+    targetIndex = findReactSelectOptionIndex(opts, matcher);
+  }
+
+  if (targetIndex < 0) {
+    dispatchKey(input, "Escape");
+    return false;
+  }
+
+  const expectedText = (opts[targetIndex].innerText || opts[targetIndex].textContent || "").trim();
+  const optionValue = opts[targetIndex].getAttribute("data-value") || expectedText;
   input.focus();
-  input.click();
-  const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
-  if (valueSetter) valueSetter.call(input, text);
-  else input.value = text;
-  input.dispatchEvent(new InputEvent("input", {
-    bubbles: true,
-    cancelable: true,
-    inputType: "insertText",
-    data: text
-  }));
-  dispatchKey(input, "ArrowDown");
-  dispatchKey(input, "Enter");
+
+  const tryCommitSelection = async (optionEl) => {
+    if (!optionEl) return false;
+    await activateReactSelectOption(optionEl);
+    if (reactSelectMatchesExpected(input, expectedText)) return true;
+    if (input.getAttribute("aria-expanded") === "true") {
+      dispatchKey(input, "Enter");
+      await nextFrame();
+    }
+    return reactSelectMatchesExpected(input, expectedText);
+  };
+
+  let success = await tryCommitSelection(opts[targetIndex]);
+  if (!success) {
+    await typeReactSelectFilter(input, expectedText);
+    found = readReactSelectListbox(input) || found;
+    opts = found?.opts || opts;
+    targetIndex = findReactSelectOptionIndex(opts, matcher);
+    if (targetIndex >= 0) {
+      success = await tryCommitSelection(opts[targetIndex]);
+    }
+  }
+
+  if (!success) {
+    let currentIndex = getActiveListboxOptionIndex(input, opts);
+    if (currentIndex < 0) {
+      dispatchKey(input, "ArrowDown");
+      currentIndex = getActiveListboxOptionIndex(input, opts);
+    }
+    let guard = 0;
+    while (currentIndex !== targetIndex && guard < opts.length + 3) {
+      dispatchKey(input, currentIndex < targetIndex ? "ArrowDown" : "ArrowUp");
+      const nextIndex = getActiveListboxOptionIndex(input, opts);
+      if (nextIndex === currentIndex || nextIndex < 0) break;
+      currentIndex = nextIndex;
+      guard++;
+    }
+    dispatchKey(input, "Enter");
+    await nextFrame();
+    success = reactSelectMatchesExpected(input, expectedText);
+    if (!success) success = await tryCommitSelection(opts[targetIndex]);
+  }
+
+  const syncResult = syncReactSelectNativeInput(input, expectedText, optionValue);
+  if (!success) success = reactSelectIsCommitted(input, expectedText);
+  if (!success && syncResult.nativeFound) {
+    syncReactSelectNativeInput(input, expectedText, optionValue);
+    success = reactSelectIsCommitted(input, expectedText);
+  }
+
+  if (input.getAttribute("aria-expanded") === "true") {
+    dispatchKey(input, "Escape");
+  }
+  input.blur();
+  return success;
+}
+
+async function selectComboboxOption(el, matcher, filterHint = "") {
+  const input = getComboboxInput(el);
+  if (!input || typeof matcher !== "function") return false;
+  if (isReactSelectCombobox(input)) {
+    return selectReactSelectOption(input, matcher, filterHint);
+  }
+  openCombobox(input);
+  const options = getListboxOptions(input);
+  const option = options.find(opt => {
+    const text = (opt.innerText || opt.textContent || "").trim();
+    const value = (opt.getAttribute("data-value") || opt.getAttribute("value") || opt.id || "").toLowerCase();
+    return matcher(text, value);
+  });
+  if (!option) return false;
+  option.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, view: window }));
+  option.click();
+  option.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, view: window }));
   input.dispatchEvent(new Event("change", { bubbles: true }));
   input.blur();
   return true;
+}
+
+function setComboboxOption(el, answer, key) {
+  const hint = getSettingComboboxHint(key, answer);
+  return selectComboboxOption(
+    el,
+    (text, value) => optionMatchesSetting(answer, text, value, key),
+    hint
+  );
 }
 
 const stateAliases = window.__formSlayerStateAliases || {};
@@ -818,7 +1350,7 @@ function getStateMatchValues(value) {
   return [...new Set(values.filter(Boolean))];
 }
 
-function runFill(data, options = {}) {
+async function runFill(data, options = {}) {
   if (typeof options.showRequiredMarkers === "boolean") {
     requiredMarkerState.enabled = options.showRequiredMarkers;
   }
@@ -871,13 +1403,13 @@ function runFill(data, options = {}) {
     if (!matchesSponsorship) return;
     setSelectOption(el, o => workAuthNoOption(o.text, o.value));
   });
-  document.querySelectorAll("input[role='combobox']").forEach(el => {
-    if (workAuthPrefForPolicy) return;
+  for (const el of document.querySelectorAll("input.select__input[role='combobox'], input[role='combobox']")) {
+    if (workAuthPrefForPolicy) break;
+    if (!el.classList.contains("select__input") && el.closest(".iti")) continue;
     const questionText = getFieldQuestionText(el);
-    const matchesSponsorship = isSponsorshipRequiredQuestion(questionText);
-    if (!matchesSponsorship) return;
-    setComboboxOption(el, "No");
-  });
+    if (!isSponsorshipRequiredQuestion(questionText)) continue;
+    await setComboboxOption(el, "no");
+  }
 
   // Valid driver's license — find the question context and click "Yes"
   forEachChoice(el => {
@@ -930,16 +1462,16 @@ function runFill(data, options = {}) {
         workAuthClickedGroups.add(groupKey);
       }
     });
-    document.querySelectorAll("input[role='combobox']").forEach(el => {
+    for (const el of document.querySelectorAll("input.select__input[role='combobox'], input[role='combobox']")) {
+      if (!el.classList.contains("select__input") && el.closest(".iti")) continue;
       const questionText = getFieldQuestionText(el);
-      const shouldApply = shouldApplyWorkAuthSetting(questionText);
+      if (!shouldApplyWorkAuthSetting(questionText)) continue;
       const groupKey = "combobox:" + (el.name || el.id || questionText.slice(0, 120));
+      if (workAuthClickedGroups.has(groupKey)) continue;
       const answer = workAuthAnswerForQuestion(workAuthPref, questionText);
-      if (!shouldApply) return;
-      if (workAuthClickedGroups.has(groupKey)) return;
-      const changed = setComboboxOption(el, answer === "yes" ? "Yes" : "No");
+      const changed = await setComboboxOption(el, answer);
       if (changed) workAuthClickedGroups.add(groupKey);
-    });
+    }
   }
 
   const choiceSettings = [
@@ -956,8 +1488,12 @@ function runFill(data, options = {}) {
       matchesQuestion: (label, parentText) =>
         parentText.includes("race") ||
         parentText.includes("ethnicity") ||
+        parentText.includes("hispanic") ||
+        parentText.includes("latino") ||
         label.includes("race") ||
-        label.includes("ethnicity")
+        label.includes("ethnicity") ||
+        label.includes("hispanic") ||
+        label.includes("latino")
     },
     {
       key: "disability",
@@ -969,15 +1505,35 @@ function runFill(data, options = {}) {
     }
   ];
 
-  choiceSettings.forEach(({ key, matchesQuestion }) => {
-    const pref = normalizePreference(data, key);
-    if (!pref) return;
-    forEachChoice(el => {
-      const { label, parentText, value } = getChoiceContext(el);
-      if (!matchesQuestion(label, parentText)) return;
-      clickChoiceIfMatches(el, pref, label, value);
-    });
-  });
+  async function applyChoiceSettingsPass() {
+    for (const { key, matchesQuestion } of choiceSettings) {
+      const pref = normalizePreference(data, key);
+      if (!pref) continue;
+      forEachChoice(el => {
+        const { label, parentText, value } = getChoiceContext(el);
+        if (!matchesQuestion(label, parentText)) return;
+        const answer = getSettingAnswerText(key, pref, parentText || label);
+        if (optionMatchesSetting(answer, label, value, key)) el.click();
+      });
+      document.querySelectorAll("select").forEach(el => {
+        const label = getLabel(el);
+        if (!matchesQuestion(label, label)) return;
+        const answer = getSettingAnswerText(key, pref, label);
+        setSelectOption(el, o => optionMatchesSetting(answer, o.text, o.value, key));
+      });
+      for (const el of document.querySelectorAll("input.select__input[role='combobox']")) {
+        const label = getLabel(el);
+        if (!matchesQuestion(label, label)) continue;
+        const answer = getSettingAnswerText(key, pref, label);
+        await setComboboxOption(el, answer, key);
+      }
+    }
+  }
+
+  // Some forms reveal dependent demographic fields after a prior answer (e.g. race after Hispanic/Latino).
+  // Run a second pass so newly revealed follow-up questions are filled in the same click.
+  await applyChoiceSettingsPass();
+  await applyChoiceSettingsPass();
 
   // Family / prior company — radios, selects, or free-text (some forms type "No" in a text field)
   document.querySelectorAll("input[type=radio], input[type=checkbox], input[type=text], textarea, select").forEach(el => {
@@ -1004,12 +1560,15 @@ function runFill(data, options = {}) {
 
   let mainLoopFilled = 0;
   const fillableNow = collectFillable();
-  fillableNow.forEach(el => {
+  for (const el of fillableNow) {
     const questionText = getFieldQuestionText(el);
-    if (isYearsExperienceQuantityQuestion(questionText)) return;
+    if (isYearsExperienceQuantityQuestion(questionText)) continue;
     const key = matchField(el);
-    if (!key || !data[key] || key === "familyWorksAtCompany" || key === "priorCompanyRelationship") return;
+    if (!key || !data[key] || key === "familyWorksAtCompany" || key === "priorCompanyRelationship") continue;
+    if (key === "country" && isPhoneDialCodeField(el)) continue;
     mainLoopFilled++;
+    const role = (el.getAttribute("role") || "").toLowerCase();
+    const skippedIti = role === "combobox" && !el.classList.contains("select__input") && Boolean(el.closest(".iti"));
     if (el.tagName === "SELECT") {
         let opt;
         if (key === "travelAvailability") {
@@ -1034,10 +1593,33 @@ function runFill(data, options = {}) {
           opt = [...el.options].find(o => o.text.toLowerCase().includes(raw) || String(o.value || "").toLowerCase() === raw);
         }
         if (opt) setSelectOption(el, o => o === opt);
+    } else if (role === "combobox") {
+      if (skippedIti) continue;
+      let comboboxOk = false;
+      if (key === "travelAvailability") {
+        const desiredBucket = normalizeTravelBucket(data[key]);
+        if (!desiredBucket) continue;
+        comboboxOk = await selectComboboxOption(el, (text) => bucketFromText(text) === desiredBucket);
+      } else if (key === "state") {
+        const values = getStateMatchValues(data[key]);
+        comboboxOk = await selectComboboxOption(el, (text, value) => {
+          const optionText = String(text || "").toLowerCase();
+          const optionValue = String(value || "").toLowerCase();
+          return values.some(v => optionText.includes(v) || optionValue === v);
+        }, String(data[key]));
+      } else {
+        const raw = String(data[key]).toLowerCase();
+        comboboxOk = await selectComboboxOption(el, (text, value) => {
+          const optionText = String(text || "").toLowerCase();
+          const optionValue = String(value || "").toLowerCase();
+          return optionText.includes(raw) || optionValue === raw;
+        }, String(data[key]));
+      }
     } else {
-      fillInput(el, data[key]);
+      if (key === "phone") await fillPhoneInput(el, data[key], data.country);
+      else fillInput(el, data[key]);
     }
-  });
+  }
   const requiredState = refreshRequiredMarkers();
   return {
     mainLoopFilled,
@@ -1054,9 +1636,10 @@ function onFillMessage(msg, _sender, sendResponse) {
   }
   if (msg.action === "fill") {
     const payload = msg.data;
-    whenFormReady(() => sendResponse({ ok: true, debug: runFill(payload, {
-      showRequiredMarkers: msg.showRequiredMarkers
-    }) }));
+    whenFormReady(() => {
+      runFill(payload, { showRequiredMarkers: msg.showRequiredMarkers })
+        .then(debug => sendResponse({ ok: true, debug }));
+    });
     return true;
   }
   if (msg.action === "setRequiredMarkers") {

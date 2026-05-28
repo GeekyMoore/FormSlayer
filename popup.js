@@ -1,5 +1,5 @@
 const fields = ["firstName","lastName","preferredName","email","phone","address","city","state","country","zip","linkedin","website","jobTitle","employer","salary","travelAvailability","relocationWillingness","familyWorksAtCompany","priorCompanyRelationship","workAuthorization","gender","race","disability","veteran","educationLevel","startDate","coverLetter"];
-const EXPECTED_CONTENT_VERSION = "skip-hidden-fill-v1";
+const EXPECTED_CONTENT_VERSION = "veteran-status-phrases-v1";
 const SHOW_REQUIRED_MARKERS_KEY = "showRequiredMarkers";
 let requiredFrameIds = [];
 let requiredCountsByFrame = new Map();
@@ -54,7 +54,7 @@ function setStatus(text, isError) {
 
 function injectContentScript(tabId, callback) {
   chrome.scripting.executeScript(
-    { target: { tabId, allFrames: true }, files: ["state-aliases.js", "content.js"] },
+    { target: { tabId, allFrames: true }, files: ["state-aliases.js", "area-code-aliases.js", "content.js"] },
     callback
   );
 }
