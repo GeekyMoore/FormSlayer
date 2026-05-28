@@ -1,5 +1,5 @@
 (() => {
-const CONTENT_SCRIPT_VERSION = "required-markers-v1";
+const CONTENT_SCRIPT_VERSION = "skip-hidden-fill-v1";
 const fieldMap = {
   firstName:   ["first name", "first_name", "fname", "given name", "legal first", "preferred first"],
   lastName:    ["last name", "last_name", "lname", "surname", "family name", "legal last"],
@@ -139,7 +139,8 @@ function getMatchHaystack(el) {
   return parts.join(" ").toLowerCase();
 }
 
-const FILLABLE_SELECTOR = "input:not([type=submit]):not([type=file]):not([type=button]):not([type=reset]), textarea, select, [contenteditable='true'], [contenteditable='']";
+const FILLABLE_SELECTOR = "input:not([type=hidden]):not([type=submit]):not([type=file]):not([type=button]):not([type=reset]), textarea, select, [contenteditable='true'], [contenteditable='']";
+const REQUIRED_CANDIDATE_SELECTOR = "input:not([type=submit]):not([type=button]):not([type=reset]), textarea, select, [contenteditable='true'], [contenteditable='']";
 
 function collectAll(selector) {
   const seen = new Set();
@@ -167,6 +168,10 @@ function collectAll(selector) {
 
 function collectFillable() {
   return collectAll(FILLABLE_SELECTOR);
+}
+
+function collectRequiredCandidates() {
+  return collectAll(REQUIRED_CANDIDATE_SELECTOR);
 }
 
 const CHOICE_SELECTOR = "input[type=radio], input[type=checkbox]";
@@ -291,7 +296,7 @@ function getRequiredItemKey(el, target) {
   return `field:${el.tagName}:${type}:${el.name || ""}:${target.id || ""}`;
 }
 
-function collectRequiredFieldState(fields = collectFillable()) {
+function collectRequiredFieldState(fields = collectRequiredCandidates()) {
   const itemMap = new Map();
   const seenChoiceGroups = new Set();
   const upsertItem = (key, target, answered) => {
@@ -354,7 +359,7 @@ function getChoiceGroup(el) {
     .filter(candidate => candidate.name === el.name && candidate.form === el.form);
 }
 
-function collectUnfilledRequiredFields(fields = collectFillable()) {
+function collectUnfilledRequiredFields(fields = collectRequiredCandidates()) {
   return collectRequiredFieldState(fields).unansweredTargets;
 }
 
@@ -614,6 +619,16 @@ function isWorkAuthStatusQuestion(text) {
   return /\bwork authorization status\b/.test(text) || /\bauthorization status\b/.test(text);
 }
 
+function isDirectWorkAuthorizationQuestion(text) {
+  if (!text) return false;
+  const t = text.toLowerCase();
+  return (
+    t.includes("authorized to work") ||
+    t.includes("legally authorized") ||
+    t.includes("eligible to work")
+  );
+}
+
 function isSponsorshipRequiredQuestion(text) {
   if (!text) return false;
   const t = text.toLowerCase();
@@ -646,6 +661,9 @@ function shouldApplyWorkAuthSetting(questionText) {
 
 // Authorized in the US → no sponsorship needed; not authorized → yes sponsorship needed.
 function workAuthAnswerForQuestion(workAuthPref, questionText) {
+  if (isDirectWorkAuthorizationQuestion(questionText) && !isWorkAuthStatusQuestion(questionText)) {
+    return workAuthPref;
+  }
   if (isSponsorshipRequiredQuestion(questionText)) {
     return workAuthPref === "yes" ? "no" : "yes";
   }
@@ -787,59 +805,7 @@ function setComboboxOption(el, text) {
   return true;
 }
 
-const stateAliases = {
-  al: "alabama",
-  ak: "alaska",
-  az: "arizona",
-  ar: "arkansas",
-  ca: "california",
-  co: "colorado",
-  ct: "connecticut",
-  de: "delaware",
-  dc: "district of columbia",
-  fl: "florida",
-  ga: "georgia",
-  hi: "hawaii",
-  id: "idaho",
-  il: "illinois",
-  in: "indiana",
-  ia: "iowa",
-  ks: "kansas",
-  ky: "kentucky",
-  la: "louisiana",
-  me: "maine",
-  md: "maryland",
-  ma: "massachusetts",
-  mi: "michigan",
-  mn: "minnesota",
-  ms: "mississippi",
-  mo: "missouri",
-  mt: "montana",
-  ne: "nebraska",
-  nv: "nevada",
-  nh: "new hampshire",
-  nj: "new jersey",
-  nm: "new mexico",
-  ny: "new york",
-  nc: "north carolina",
-  nd: "north dakota",
-  oh: "ohio",
-  ok: "oklahoma",
-  or: "oregon",
-  pa: "pennsylvania",
-  ri: "rhode island",
-  sc: "south carolina",
-  sd: "south dakota",
-  tn: "tennessee",
-  tx: "texas",
-  ut: "utah",
-  vt: "vermont",
-  va: "virginia",
-  wa: "washington",
-  wv: "west virginia",
-  wi: "wisconsin",
-  wy: "wyoming"
-};
+const stateAliases = window.__formSlayerStateAliases || {};
 const stateNamesToAbbr = Object.fromEntries(
   Object.entries(stateAliases).map(([abbr, name]) => [name, abbr])
 );
@@ -1072,7 +1038,7 @@ function runFill(data, options = {}) {
       fillInput(el, data[key]);
     }
   });
-  const requiredState = refreshRequiredMarkers(fillableNow);
+  const requiredState = refreshRequiredMarkers();
   return {
     mainLoopFilled,
     inputsCount: fillableNow.length,

@@ -52,6 +52,7 @@ From the repository root, create the upload ZIP with:
 rm -f formslayer-chrome-store.zip
 zip -r formslayer-chrome-store.zip \
   manifest.json \
+  state-aliases.js \
   content.js \
   popup.html \
   popup.js \

@@ -13,7 +13,7 @@
     .row > div { flex: 1; min-width: 0; }
     .row input { width: 100%; }
     button { margin-top: 12px; width: 100%; padding: 8px; font-size: 14px; border: none; border-radius: 4px; cursor: pointer; }
-    #saveBtn { background: #333; color: #fff; }
+    #saveBtn { background: #333; color: #fff; width: 100%; padding: 6px 10px; font-size: 12px; white-space: nowrap; }
     #fillBtn { background: #2563eb; color: #fff; margin-top: 0; width: auto; flex-shrink: 0; padding: 6px 10px; font-size: 12px; white-space: nowrap; }
     #nextRequiredBtn { background: #e5e7eb; color: #111827; margin-top: 0; width: auto; flex-shrink: 0; padding: 6px 8px; font-size: 12px; white-space: nowrap; }
     #nextRequiredBtn:disabled { color: #9ca3af; cursor: default; }
@@ -46,22 +46,22 @@
       <div class="row">
         <div>
           <label>First Name</label>
-          <input id="firstName" placeholder="Jane" />
+          <input id="firstName" placeholder="First name" />
         </div>
         <div>
           <label>Last Name</label>
-          <input id="lastName" placeholder="Doe" />
+          <input id="lastName" placeholder="Last name" />
         </div>
       </div>
 
       <label>Preferred Name</label>
-      <input id="preferredName" placeholder="Jay (if different)" />
+      <input id="preferredName" placeholder="Preferred name (if different)" />
 
       <label>Email</label>
-      <input id="email" placeholder="jane@email.com" />
+      <input id="email" placeholder="Email address" />
 
       <label>Phone</label>
-      <input id="phone" placeholder="555-555-5555" />
+      <input id="phone" placeholder="Phone number" />
     </div>
   </details>
 
@@ -69,12 +69,12 @@
     <summary>Location</summary>
     <div class="section-content">
       <label>Address</label>
-      <input id="address" placeholder="123 Main St" />
+      <input id="address" placeholder="Street address" />
 
       <div class="row">
         <div>
           <label>City</label>
-          <input id="city" placeholder="Austin" />
+          <input id="city" placeholder="City" />
         </div>
         <div>
           <label>State</label>
@@ -192,7 +192,7 @@
       </select>
 
       <label>Zip</label>
-      <input id="zip" placeholder="78701" />
+      <input id="zip" placeholder="Postal code" />
     </div>
   </details>
 
@@ -200,22 +200,22 @@
     <summary>Professional</summary>
     <div class="section-content">
       <label>LinkedIn URL</label>
-      <input id="linkedin" placeholder="linkedin.com/in/jane" />
+      <input id="linkedin" placeholder="LinkedIn profile URL" />
 
       <label>Portfolio / Website</label>
-      <input id="website" placeholder="janedoe.com" />
+      <input id="website" placeholder="Website URL" />
 
       <label>Current Job Title</label>
-      <input id="jobTitle" placeholder="Senior UX Designer" />
+      <input id="jobTitle" placeholder="Current job title" />
 
       <label>Current Employer</label>
-      <input id="employer" placeholder="Current company" />
+      <input id="employer" placeholder="Current employer" />
 
       <label>Salary Expectation</label>
-      <input id="salary" placeholder="$90,000" />
+      <input id="salary" placeholder="Salary expectation" />
 
       <label>Available Start Date</label>
-      <input id="startDate" placeholder="2 weeks notice" />
+      <input id="startDate" placeholder="Available start date" />
     </div>
   </details>
 
