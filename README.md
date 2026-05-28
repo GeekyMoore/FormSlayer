@@ -1,7 +1,7 @@
 # FormSlayer
 
 <p align="center">
-  <img src="formslayer_icon.svg" alt="FormSlayer icon" width="96" />
+  <img src="icons/icon128.png" alt="FormSlayer icon" width="96" />
 </p>
 
 A Chrome extension that auto-fills job application forms.
@@ -80,6 +80,7 @@ manifest.json   — Chrome extension config
 popup.html      — Settings UI
 popup.js        — Save/load settings
 content.js      — Form detection and filling logic
+icons/          — Chrome extension icon assets
 ```
 
 ## Privacy
