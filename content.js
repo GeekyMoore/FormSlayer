@@ -17,9 +17,9 @@ const fieldMap = {
   jobTitle:    ["job title", "current title", "recent job title", "position", "current position"],
   employer:    ["employer", "company", "company name", "recent employer", "current employer", "current company", "organization"],
   preferredName: ["preferred name", "preferred first name", "goes by", "nickname", "full name", "fullname", "name"],
-  salary:      ["salary", "compensation", "compensation requirements", "expected salary", "salary expectation", "pay expectation", "salary expectations", "desired annual base salary", "annual base salary", "desired base salary", "base salary"],
+  salary:      ["salary", "compensation", "compensation requirements", "expected salary", "salary expectation", "pay expectation", "salary expectations", "desired pay", "expected pay", "desired annual base salary", "annual base salary", "desired base salary", "base salary"],
   travelAvailability: ["travel availability", "willingness to travel", "travel requirement", "travel percentage", "percent travel", "% travel", "travel (percent)", "travel up to"],
-  educationLevel: ["education", "education level", "highest education", "degree", "highest degree"],
+  educationLevel: ["education", "education level", "highest education", "highest education obtained", "degree", "highest degree"],
   startDate:   ["start date", "available to start", "when can you start", "availability", "available start"],
   coverLetter: ["cover letter"],
   familyWorksAtCompany: ["anyone in your family", "in your family currently work", "family member employed", "family member work", "know anyone who works", "relative employed", "related to an employee", "related to anyone", "former employee at", "currently employed by a company who uses", "employed by a company who uses", "affiliated brands"],
@@ -207,6 +207,11 @@ function hasRequiredMarker(text) {
 }
 
 function getQuestionScope(el) {
+  const type = (el?.type || "").toLowerCase();
+  if (type === "radio" || type === "checkbox") {
+    const fieldset = el.closest("fieldset");
+    if (fieldset) return fieldset;
+  }
   return el.closest("fieldset,[role=group],[role='radiogroup'],li,.question,.form-group,.field,.form-question,.select__container,.select,.application-question,.questionnaire-question");
 }
 
@@ -244,6 +249,11 @@ function getRequiredTextCandidates(el) {
 function hasRequiredSignal(el) {
   if (!el || isSkippableRequiredCandidate(el)) return false;
   const type = (el.type || "").toLowerCase();
+  const scope = getQuestionScope(el);
+  if (scope && scope !== el) {
+    if (scope.required || scope.hasAttribute("required")) return true;
+    if ((scope.getAttribute("aria-required") || "").toLowerCase() === "true") return true;
+  }
   return (
     el.required ||
     el.hasAttribute("required") ||
@@ -658,6 +668,7 @@ function isWorkAuthQuestion(text) {
     t.includes("authorized to work") ||
     t.includes("legally authorized to work") ||
     /legally\s+authorized/.test(t) ||
+    t.includes("proof of citizenship") ||
     (t.includes("authorization") && t.includes("united states")) ||
     (t.includes("authorized to work") && (t.includes("country you currently reside") || t.includes("country you reside")))
   );
@@ -955,6 +966,16 @@ function optionMatchesSetting(answer, label, value, key) {
       return normalizedLabel.includes("remote") || normalizedLabel.includes("work from home");
     }
   }
+  if (key === "educationLevel") {
+    const level = String(answer || "").toLowerCase().trim();
+    if (level === "associate" && normalizedLabel.includes("associates")) return true;
+    if (level === "mba" && normalizedLabel.includes("business administration")) return true;
+    if (level === "master" && normalizedLabel.includes("master") && !normalizedLabel.includes("business administration")) return true;
+    if (level === "phd" && (normalizedLabel.includes("doctorate") || normalizedLabel.includes("doctor of philosophy"))) return true;
+    if (level === "md" && normalizedLabel.includes("medical doctor")) return true;
+    if (normalizedLabel.includes(level)) return true;
+    return false;
+  }
   if (textMatchesChoicePreference(answer, normalizedLabel, normalizedValue)) return true;
   if (answer.includes("prefer not")) {
     return (
@@ -981,6 +1002,16 @@ function getSettingComboboxHint(key, answer) {
     if (answer === "yes") return "have a disability";
     if (answer.includes("prefer not")) return "do not want to answer";
   }
+  if (key === "educationLevel") {
+    const level = String(answer || "").toLowerCase().trim();
+    if (level === "associate") return "associates";
+    if (level === "bachelor") return "bachelor";
+    if (level === "master") return "master";
+    if (level === "mba") return "business administration";
+    if (level === "phd") return "doctorate";
+    if (level === "md") return "medical";
+    if (level === "high school") return "high school";
+  }
   return answer;
 }
 
@@ -991,6 +1022,139 @@ function setSelectOption(el, matcher) {
   el.value = opt.value;
   el.dispatchEvent(new Event("change", { bubbles: true }));
   return true;
+}
+
+function isFabricBackedSelect(el) {
+  return (
+    el?.tagName === "SELECT" &&
+    el.getAttribute("aria-hidden") === "true" &&
+    Boolean(getFabricSelectToggle(el))
+  );
+}
+
+function getFabricSelectToggle(selectEl) {
+  return selectEl.closest(".MuiFormControl-root, .fab-Select")?.querySelector("button.fab-SelectToggle");
+}
+
+function getFabricSelectDisplayText(selectEl) {
+  const toggle = getFabricSelectToggle(selectEl);
+  const guts = toggle?.querySelector(".fab-SelectToggle__guts");
+  return cleanLabelText(guts?.innerText || "");
+}
+
+function matchProfileValueToOption(key, savedValue, optionText, optionValue) {
+  if (!savedValue) return false;
+  const text = String(optionText || "");
+  const value = String(optionValue || "");
+  if (optionMatchesSetting(savedValue, text, value, key)) return true;
+  if (key === "travelAvailability") {
+    const desiredBucket = normalizeTravelBucket(savedValue);
+    if (desiredBucket && bucketFromText(text) === desiredBucket) return true;
+  }
+  if (key === "state") {
+    const values = getStateMatchValues(savedValue);
+    const optionTextLower = text.toLowerCase();
+    const optionValueLower = value.toLowerCase();
+    return values.some(v => optionTextLower.includes(v) || optionValueLower === v);
+  }
+  const raw = String(savedValue).toLowerCase().trim();
+  return text.toLowerCase().includes(raw) || value.toLowerCase() === raw;
+}
+
+function getFabricSelectMenuOptions(toggle) {
+  const menuId = toggle?.getAttribute("data-menu-id");
+  if (!menuId) return [];
+  const selectors = [
+    `[data-helium-id="${menuId}"] .fab-MenuOption[role='menuitem']`,
+    `[data-fabric-component="Menu"][data-helium-id="${menuId}"] .fab-MenuOption[role='menuitem']`,
+    `[data-menu-id="${menuId}"] .fab-MenuOption[role='menuitem']`
+  ];
+  const seen = new Set();
+  const out = [];
+  for (const selector of selectors) {
+    for (const el of document.querySelectorAll(selector)) {
+      if (seen.has(el)) continue;
+      seen.add(el);
+      out.push(el);
+    }
+  }
+  return out;
+}
+
+function openFabricSelectToggle(toggle) {
+  toggle.scrollIntoView({ block: "center", inline: "nearest" });
+  toggle.focus();
+  const init = { bubbles: true, cancelable: true, view: window, buttons: 1, detail: 1 };
+  for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup", "click"]) {
+    const Ctor = type.startsWith("pointer") ? PointerEvent : MouseEvent;
+    toggle.dispatchEvent(new Ctor(type, init));
+  }
+}
+
+async function collectFabricSelectMenuOptions(toggle) {
+  let options = getFabricSelectMenuOptions(toggle);
+  for (let i = 0; options.length === 0 && i < 12; i++) {
+    await nextFrame();
+    options = getFabricSelectMenuOptions(toggle);
+  }
+  return options;
+}
+
+async function activateFabricMenuOption(optionEl) {
+  optionEl.scrollIntoView({ block: "nearest" });
+  optionEl.focus();
+  const init = { bubbles: true, cancelable: true, view: window, buttons: 1, detail: 1 };
+  for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup", "click"]) {
+    const Ctor = type.startsWith("pointer") ? PointerEvent : MouseEvent;
+    optionEl.dispatchEvent(new Ctor(type, init));
+  }
+  await nextFrame();
+  dispatchKey(optionEl, "Enter");
+  await nextFrame();
+}
+
+async function selectFabricSelectOption(selectEl, key, savedValue) {
+  if (!savedValue || !isFabricBackedSelect(selectEl)) return false;
+  const toggle = getFabricSelectToggle(selectEl);
+  if (!toggle) return false;
+  if (String(selectEl.value || "").trim() && matchProfileValueToOption(key, savedValue, getFabricSelectDisplayText(selectEl), selectEl.value)) {
+    return true;
+  }
+  openFabricSelectToggle(toggle);
+  let options = await collectFabricSelectMenuOptions(toggle);
+  if (!options.length) {
+    dispatchKey(toggle, " ");
+    await nextFrame();
+    options = await collectFabricSelectMenuOptions(toggle);
+  }
+  if (!options.length) return false;
+  const match = options.find(opt => {
+    const text = (opt.innerText || opt.textContent || "").trim();
+    return matchProfileValueToOption(key, savedValue, text, "");
+  });
+  if (!match) {
+    toggle.click();
+    return false;
+  }
+  await activateFabricMenuOption(match);
+  if (!String(selectEl.value || "").trim()) {
+    await activateFabricMenuOption(match);
+  }
+  if (!String(selectEl.value || "").trim()) {
+    toggle.click();
+    return false;
+  }
+  selectEl.dispatchEvent(new Event("change", { bubbles: true }));
+  return true;
+}
+
+async function fillFabricBackedSelects(data) {
+  for (const sel of document.querySelectorAll('select[aria-hidden="true"]')) {
+    if (!isFabricBackedSelect(sel)) continue;
+    const key = matchField(sel);
+    if (!key || !data[key] || key === "familyWorksAtCompany" || key === "priorCompanyRelationship") continue;
+    await selectFabricSelectOption(sel, key, data[key]);
+  }
 }
 
 function getComboboxInput(el) {
@@ -1789,12 +1953,16 @@ async function runFill(data, options = {}) {
         const answer = getSettingAnswerText(key, pref, questionText || label);
         if (optionMatchesSetting(answer, label, value, key)) el.click();
       });
-      document.querySelectorAll("select").forEach(el => {
+      for (const el of document.querySelectorAll("select")) {
         const label = getLabel(el);
-        if (!matchesQuestion(label, label)) return;
+        if (!matchesQuestion(label, label)) continue;
         const answer = getSettingAnswerText(key, pref, label);
+        if (isFabricBackedSelect(el)) {
+          await selectFabricSelectOption(el, key, answer);
+          continue;
+        }
         setSelectOption(el, o => optionMatchesSetting(answer, o.text, o.value, key));
-      });
+      }
       for (const el of document.querySelectorAll("input.select__input[role='combobox']")) {
         const label = getLabel(el);
         if (!matchesQuestion(label, label)) continue;
@@ -1833,6 +2001,8 @@ async function runFill(data, options = {}) {
     clickChoiceIfMatches(el, pref, label, (el.value || "").toLowerCase());
   });
 
+  await fillFabricBackedSelects(data);
+
   let mainLoopFilled = 0;
   const fillableNow = collectFillable();
   for (const el of fillableNow) {
@@ -1847,6 +2017,7 @@ async function runFill(data, options = {}) {
     const role = (el.getAttribute("role") || "").toLowerCase();
     const skippedIti = role === "combobox" && !el.classList.contains("select__input") && Boolean(el.closest(".iti"));
     if (el.tagName === "SELECT") {
+        if (isFabricBackedSelect(el)) continue;
         let opt;
         if (key === "travelAvailability") {
           const desiredBucket = normalizeTravelBucket(data[key]);
