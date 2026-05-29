@@ -4,7 +4,7 @@
   <img src="icons/icon128.png" alt="FormSlayer icon" width="96" />
 </p>
 
-A Chrome extension that auto-fills job application forms. It handles most standard application pages most of the time, but not every field on every site. Labels and widgets differ, and new wording shows up often.
+A Chrome extension that auto-fills most job application forms intelligently.
 
 ## How It Works
 
