@@ -48,6 +48,18 @@ EEOC and similar optional fields can generally be skipped, but for the rare case
 
 ## Install
 
+<p align="center">
+  <a href="https://chromewebstore.google.com/detail/formslayer/ggfgoklgbbdajjhlonlfhhbeaigdnlnf">
+    <img src="docs/chrome-web-store-badge.png" alt="Available in the Chrome Web Store" width="206" />
+  </a>
+</p>
+
+Install [FormSlayer from the Chrome Web Store](https://chromewebstore.google.com/detail/formslayer/ggfgoklgbbdajjhlonlfhhbeaigdnlnf).
+
+### Developer install
+
+To run from source or test unreleased changes:
+
 1. Clone or download this repo
 2. Go to `chrome://extensions`
 3. Enable **Developer Mode** (top-right toggle)
