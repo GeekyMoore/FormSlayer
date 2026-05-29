@@ -1,9 +1,10 @@
 const fields = ["firstName","lastName","preferredName","email","phone","address","city","state","country","zip","linkedin","website","jobTitle","employer","salary","travelAvailability","relocationWillingness","familyWorksAtCompany","priorCompanyRelationship","workAuthorization","workEnvironment","gender","race","disability","veteran","educationLevel","startDate","coverLetter"];
 const multiSelectFields = ["workEnvironment"];
-const EXPECTED_CONTENT_VERSION = "veteran-status-phrases-v1";
+const EXPECTED_CONTENT_VERSION = "required-state-sync-v1";
 const SHOW_REQUIRED_MARKERS_KEY = "showRequiredMarkers";
 let requiredFrameIds = [];
 let requiredCountsByFrame = new Map();
+let trackedTabId = null;
 
 function setRequiredStatus(count) {
   const requiredStatus = document.getElementById("requiredStatus");
@@ -23,6 +24,35 @@ function syncRequiredStatusFromFrames() {
     .filter(([, count]) => count > 0)
     .map(([frameId]) => frameId);
   setRequiredStatus(total);
+}
+
+function applyRequiredResponses(responses, onlyIfSyncFlag = false) {
+  const okResponses = (responses || []).filter(r => {
+    if (!r?.ok) return false;
+    if (!onlyIfSyncFlag) return true;
+    return Boolean(r.debug?.shouldSyncPopup);
+  });
+  if (!okResponses.length) return false;
+  requiredCountsByFrame = new Map(
+    okResponses.map(r => [r.frameId, r.debug?.requiredRemaining ?? 0])
+  );
+  syncRequiredStatusFromFrames();
+  return true;
+}
+
+function syncRequiredFromActiveTab() {
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    const tab = tabs[0];
+    if (!tab?.id || !tab.url || tab.url.startsWith("chrome:") || tab.url.startsWith("edge:")) return;
+    trackedTabId = tab.id;
+    ensureContentScript(tab.id, (err) => {
+      if (err) return;
+      messageAllFrames(tab.id, { action: "getRequiredState" }, (err2, responses) => {
+        if (err2) return;
+        applyRequiredResponses(responses, true);
+      });
+    });
+  });
 }
 
 // Load saved settings
@@ -143,10 +173,7 @@ function sendFillToTab(tabId, data, retriesLeft = 2) {
       return;
     }
     const filled = okResponses.reduce((sum, r) => sum + (r.debug?.mainLoopFilled || 0), 0);
-    requiredCountsByFrame = new Map(
-      okResponses.map(r => [r.frameId, r.debug?.requiredRemaining || 0])
-    );
-    syncRequiredStatusFromFrames();
+    applyRequiredResponses(okResponses);
     const frames = okResponses.length;
     if (filled) {
       setStatus(`Filled ${filled} field(s) in ${frames} frame(s)`);
@@ -198,6 +225,7 @@ document.getElementById("fillBtn").addEventListener("click", () => {
         setStatus("Open the job application page, then try again.", true);
         return;
       }
+      trackedTabId = tab.id;
       ensureContentScript(tab.id, (err) => {
         if (err) {
           setStatus("Can't fill this page - refresh it and try again.", true);
@@ -233,6 +261,18 @@ document.getElementById("nextRequiredBtn").addEventListener("click", () => {
       setRequiredStatus(0);
       return;
     }
+    trackedTabId = tab.id;
     jumpRequiredInFrames(tab.id, [...requiredFrameIds]);
   });
 });
+
+chrome.runtime.onMessage.addListener((msg, sender) => {
+  if (msg.action !== "requiredStateUpdated") return;
+  if (sender.tab?.id == null) return;
+  if (trackedTabId != null && sender.tab.id !== trackedTabId) return;
+  trackedTabId = sender.tab.id;
+  requiredCountsByFrame.set(sender.frameId ?? 0, msg.requiredRemaining ?? 0);
+  syncRequiredStatusFromFrames();
+});
+
+syncRequiredFromActiveTab();

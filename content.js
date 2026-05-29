@@ -1,5 +1,5 @@
 (() => {
-const CONTENT_SCRIPT_VERSION = "veteran-status-phrases-v1";
+const CONTENT_SCRIPT_VERSION = "required-state-sync-v1";
 
 // Profile field config
 const fieldMap = {
@@ -185,7 +185,8 @@ const requiredJumpState = {
 };
 const requiredMarkerState = {
   enabled: true,
-  refreshTimer: null
+  refreshTimer: null,
+  lastBroadcastRemaining: null
 };
 
 const REQUIRED_MARKER_STYLE_ID = "formslayer-required-marker-style";
@@ -450,16 +451,35 @@ function refreshRequiredMarkers(fields) {
   return state;
 }
 
+function broadcastRequiredState(state) {
+  if (!requiredMarkerState.enabled || !state) return;
+  if (state.remaining === requiredMarkerState.lastBroadcastRemaining) return;
+  requiredMarkerState.lastBroadcastRemaining = state.remaining;
+  try {
+    chrome.runtime.sendMessage(
+      {
+        action: "requiredStateUpdated",
+        requiredRemaining: state.remaining,
+        requiredTotal: state.total
+      },
+      () => {
+        void chrome.runtime.lastError;
+      }
+    );
+  } catch (_) {}
+}
+
 function scheduleRequiredMarkerRefresh() {
   clearTimeout(requiredMarkerState.refreshTimer);
   requiredMarkerState.refreshTimer = setTimeout(() => {
-    refreshRequiredMarkers();
+    broadcastRequiredState(refreshRequiredMarkers());
   }, 120);
 }
 
 function setRequiredMarkersEnabled(enabled) {
   requiredMarkerState.enabled = Boolean(enabled);
   if (!requiredMarkerState.enabled) {
+    requiredMarkerState.lastBroadcastRemaining = null;
     clearRequiredMarkers();
     return refreshRequiredJumpState();
   }
@@ -2069,6 +2089,7 @@ async function runFill(data, options = {}) {
     }
   }
   const requiredState = refreshRequiredMarkers();
+  requiredMarkerState.lastBroadcastRemaining = requiredState.remaining;
   return {
     mainLoopFilled,
     inputsCount: fillableNow.length,
@@ -2098,6 +2119,21 @@ function onFillMessage(msg, _sender, sendResponse) {
   }
   if (msg.action === "jumpRequired") {
     sendResponse({ ok: true, debug: jumpToNextRequiredField() });
+    return;
+  }
+  if (msg.action === "getRequiredState") {
+    const state = collectRequiredFieldState();
+    const shouldSyncPopup =
+      requiredMarkerState.lastBroadcastRemaining != null ||
+      Boolean(document.querySelector(`[${REQUIRED_MARKER_ATTR}="true"]`));
+    sendResponse({
+      ok: true,
+      debug: {
+        requiredRemaining: state.remaining,
+        requiredTotal: state.total,
+        shouldSyncPopup
+      }
+    });
     return;
   }
 }
