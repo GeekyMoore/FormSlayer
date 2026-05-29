@@ -2,27 +2,30 @@
 <html>
 <head>
   <style>
-    body { font-family: sans-serif; width: 300px; padding: 12px; }
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; width: 300px; padding: 12px; line-height: 1.4; }
     .popup-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
     .required-jump { display: flex; align-items: center; gap: 6px; min-width: 0; }
     #requiredStatus { font-size: 12px; color: #555; white-space: nowrap; }
     label { display: block; font-size: 12px; color: #555; margin-top: 8px; }
-    input, textarea, select { width: 100%; box-sizing: border-box; padding: 5px; font-size: 13px; border: 1px solid #ccc; border-radius: 4px; }
+    input, textarea, select { width: 100%; box-sizing: border-box; padding: 7px 8px; font-size: 13px; border: 1px solid #d1d5db; border-radius: 4px; }
+    input:focus, textarea:focus, select:focus { outline: 2px solid #93c5fd; outline-offset: 0; border-color: #93c5fd; }
     textarea { height: 60px; resize: vertical; }
     .row { display: flex; gap: 8px; }
     .row > div { flex: 1; min-width: 0; }
     .row input { width: 100%; }
-    button { margin-top: 12px; width: 100%; padding: 8px; font-size: 14px; border: none; border-radius: 4px; cursor: pointer; }
-    #saveBtn { background: #333; color: #fff; width: 100%; padding: 6px 10px; font-size: 12px; white-space: nowrap; }
-    #fillBtn { background: #2563eb; color: #fff; margin-top: 0; width: auto; flex-shrink: 0; padding: 6px 10px; font-size: 12px; white-space: nowrap; }
-    #nextRequiredBtn { background: #e5e7eb; color: #111827; margin-top: 0; width: auto; flex-shrink: 0; padding: 6px 8px; font-size: 12px; white-space: nowrap; }
+    button { margin-top: 12px; width: 100%; padding: 7px 10px; font-size: 12px; font-weight: 500; border: none; border-radius: 4px; cursor: pointer; }
+    button:not(:disabled):hover { filter: brightness(0.95); }
+    #saveBtn { background: #333; color: #fff; width: 100%; white-space: nowrap; }
+    #saveBtn:disabled { opacity: 0.55; cursor: default; }
+    #fillBtn { background: #2563eb; color: #fff; margin-top: 0; width: auto; flex-shrink: 0; white-space: nowrap; }
+    #nextRequiredBtn { background: #e5e7eb; color: #111827; margin-top: 0; width: auto; flex-shrink: 0; white-space: nowrap; }
     #nextRequiredBtn:disabled { color: #9ca3af; cursor: default; }
-    .marker-toggle { display: flex; align-items: center; gap: 6px; margin: -2px 0 8px; font-size: 12px; color: #555; }
+    .marker-toggle { display: flex; align-items: center; gap: 6px; margin: 0 0 8px; font-size: 12px; color: #555; }
     .marker-toggle input { width: auto; margin: 0; }
     #status { font-size: 12px; color: green; margin: 0 0 10px; text-align: right; min-height: 16px; }
-    .section { border: 1px solid #ddd; border-radius: 6px; margin-top: 8px; background: #fff; overflow: hidden; }
-    .section summary { padding: 8px 10px; font-size: 13px; font-weight: 600; color: #333; cursor: pointer; background: #f7f7f7; }
-    .section-content { padding: 0 10px 10px; }
+    .section { border: 1px solid #e5e7eb; border-radius: 6px; margin-top: 8px; background: #fff; overflow: hidden; }
+    .section summary { padding: 8px 10px; font-size: 13px; font-weight: 600; color: #333; cursor: pointer; background: #fff; border-bottom: 1px solid #e5e7eb; }
+    .section-content { padding: 4px 10px 10px; }
     select[multiple] { min-height: 72px; }
     .field-hint { font-size: 11px; color: #777; margin-top: 4px; }
   </style>
@@ -41,7 +44,7 @@
   </label>
   <div id="status"></div>
 
-  <details class="section" open>
+  <details class="section">
     <summary>Contact</summary>
     <div class="section-content">
       <div class="row">

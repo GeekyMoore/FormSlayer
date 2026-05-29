@@ -2,9 +2,43 @@ const fields = ["firstName","lastName","preferredName","email","phone","address"
 const multiSelectFields = ["workEnvironment"];
 const EXPECTED_CONTENT_VERSION = "required-state-sync-v1";
 const SHOW_REQUIRED_MARKERS_KEY = "showRequiredMarkers";
+const saveBtn = document.getElementById("saveBtn");
+saveBtn.disabled = true;
 let requiredFrameIds = [];
 let requiredCountsByFrame = new Map();
 let trackedTabId = null;
+let savedFormSnapshot = "";
+let formLoaded = false;
+
+function getFormData() {
+  const data = {};
+  fields.forEach(f => {
+    const el = document.getElementById(f);
+    if (!el) return;
+    if (multiSelectFields.includes(f)) {
+      data[f] = [...el.selectedOptions].map(opt => opt.value).join(",");
+      return;
+    }
+    data[f] = el.value;
+  });
+  return data;
+}
+
+function serializeFormData(data) {
+  return JSON.stringify(fields.reduce((acc, field) => {
+    acc[field] = data[field] || "";
+    return acc;
+  }, {}));
+}
+
+function refreshSaveButtonState() {
+  if (!formLoaded) {
+    saveBtn.disabled = true;
+    return;
+  }
+  const currentSnapshot = serializeFormData(getFormData());
+  saveBtn.disabled = currentSnapshot === savedFormSnapshot;
+}
 
 function setRequiredStatus(count) {
   const requiredStatus = document.getElementById("requiredStatus");
@@ -67,6 +101,17 @@ chrome.storage.sync.get(fields, (data) => {
     }
     if (data[f]) el.value = data[f];
   });
+  savedFormSnapshot = serializeFormData(getFormData());
+  formLoaded = true;
+  refreshSaveButtonState();
+});
+
+fields.forEach((field) => {
+  const el = document.getElementById(field);
+  if (!el) return;
+  const eventName = el.tagName === "SELECT" ? "change" : "input";
+  el.addEventListener(eventName, refreshSaveButtonState);
+  if (eventName !== "change") el.addEventListener("change", refreshSaveButtonState);
 });
 
 chrome.storage.sync.get({ [SHOW_REQUIRED_MARKERS_KEY]: true }, (data) => {
@@ -75,17 +120,12 @@ chrome.storage.sync.get({ [SHOW_REQUIRED_MARKERS_KEY]: true }, (data) => {
 
 // Save
 document.getElementById("saveBtn").addEventListener("click", () => {
-  const data = {};
-  fields.forEach(f => {
-    const el = document.getElementById(f);
-    if (multiSelectFields.includes(f)) {
-      data[f] = [...el.selectedOptions].map(opt => opt.value).join(",");
-      return;
-    }
-    data[f] = el.value;
-  });
+  if (saveBtn.disabled) return;
+  const data = getFormData();
   chrome.storage.sync.set(data, () => {
     document.getElementById("status").textContent = "Saved!";
+    savedFormSnapshot = serializeFormData(data);
+    refreshSaveButtonState();
     setTimeout(() => document.getElementById("status").textContent = "", 2000);
   });
 });
