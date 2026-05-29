@@ -4,7 +4,7 @@
   <img src="icons/icon128.png" alt="FormSlayer icon" width="96" />
 </p>
 
-A Chrome extension that auto-fills job application forms.
+A Chrome extension that auto-fills job application forms. It handles most standard application pages most of the time, but not every field on every site. Labels and widgets differ, and new wording shows up often.
 
 ## How It Works
 
@@ -42,7 +42,7 @@ Zip codes work the same way — since a postal code implies city and state, all 
 
 **Required Field Detection**
 
-Some fields can't be pre-filled — open-ended questions custom to the role, for instance. FormSlayer flags these so you know exactly what still needs your attention before submitting.
+Some fields can't be pre-filled: open-ended role-specific questions, file uploads, custom widgets, or anything without a clear text label. FormSlayer flags what still needs your attention before you submit. That's intentional: it uses label matching and simple rules, not AI or agent-style auto-completion, so behavior stays predictable and less likely to trip captchas or anti-bot checks meant for automated agents. The tradeoff is you'll still type some answers yourself.
 
 EEOC and similar optional fields can generally be skipped, but for the rare cases they're required, FormSlayer can store that information too. All such fields are entirely optional.
 
@@ -75,7 +75,7 @@ Click the FormSlayer icon in your Chrome toolbar, fill in your details, and hit 
 
 ## Usage
 
-Navigate to a job application page, click the FormSlayer icon, then hit **Fill This Form**.
+Navigate to a job application page, click the FormSlayer icon, then hit **Fill This Form**. If something doesn't fill, add a label pattern (below) or enter it manually.
 
 ## Adding New Field Patterns
 
@@ -97,13 +97,13 @@ icons/          — Chrome extension icon assets
 
 ## Privacy
 
-FormSlayer has no call-home functions. Your data stays local to your machine via `chrome.storage.sync`. The repo is fully open to inspection under the MIT license.
+FormSlayer has no call-home functions. Your data stays local to your machine via `chrome.storage.sync`. The repo is fully open to inspection under the MIT license. There is no AI, cloud processing, or autonomous browsing. Only local matching against what you've saved.
 
 All settings are optional — if you'd rather not save personal details like location, gender, or ethnicity, leave them blank. FormSlayer will fill what it can with whatever you've provided.
 
 ## Support
 
-FormSlayer is provided as-is and stability cannot be guaranteed. Bugs and feature requests can be filed as issues, or submitted as a PR for inclusion in the main branch.
+FormSlayer is provided as-is. It has been tested across a variety of common application platforms, which aren't named here for legal reasons. Coverage varies by site. Bugs and feature requests can be filed as issues, or submitted as a PR for inclusion in the main branch.
 
 ## License
 

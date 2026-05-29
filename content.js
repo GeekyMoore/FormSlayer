@@ -8,7 +8,7 @@ const fieldMap = {
   email:       ["email", "e-mail"],
   phone:       ["phone", "phone number", "mobile number", "cell", "telephone"],
   address:     ["address", "street"],
-  city:        ["city", "town", "location"],
+  city:        ["city", "town", "location", "location (city)"],
   country:     ["country", "country/region", "country of residence", "country you currently reside", "country you reside", "nation"],
   state:       ["state", "state/region", "province", "region"],
   zip:         ["zip", "zip code", "postal", "postcode"],
@@ -1365,9 +1365,16 @@ async function selectReactSelectOption(input, matcher, filterHint = "") {
 
   if (targetIndex < 0 && filterHint) {
     await typeReactSelectFilter(input, filterHint);
-    found = readReactSelectListbox(input) || found;
-    opts = found?.opts || opts;
-    targetIndex = findReactSelectOptionIndex(opts, matcher);
+    let frames = 0;
+    while (frames < 48 && targetIndex < 0) {
+      found = readReactSelectListbox(input) || found;
+      opts = found?.opts || opts;
+      targetIndex = findReactSelectOptionIndex(opts, matcher);
+      if (targetIndex >= 0) break;
+      if (frames % 8 === 7) openReactSelectMenu(input);
+      await nextFrame();
+      frames++;
+    }
   }
 
   if (targetIndex < 0) {
