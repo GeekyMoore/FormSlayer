@@ -8,8 +8,6 @@ A Chrome extension that auto-fills most job application forms intelligently.
 
 ## How It Works
 
-FormSlayer uses three core mechanisms to fill forms intelligently:
-
 **Word Association**
 
 Fields are matched against lists of common labels that all map to the same value. For example, any field labelled with one of the following will be filled with your saved phone number:
