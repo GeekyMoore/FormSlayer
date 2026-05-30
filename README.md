@@ -103,7 +103,7 @@ All settings are optional — if you'd rather not save personal details like loc
 
 ## Support
 
-FormSlayer is provided as-is. It has been tested across a variety of common application platforms, which aren't named here for legal reasons. Coverage varies by site. Bugs and feature requests can be filed as issues, or submitted as a PR for inclusion in the main branch.
+FormSlayer is provided as-is and coverage varies by site. Bugs and feature requests can be filed as issues, or submitted as a PR for inclusion in the main branch.
 
 ## License
 
