@@ -1,6 +1,12 @@
 # FormSlayer
 
 <p align="center">
+  <a href="https://github.com/GeekyMoore/FormSlayer/blob/main/LICENSE"><img src="https://img.shields.io/github/license/GeekyMoore/FormSlayer" alt="License"></a>
+  <a href="https://chromewebstore.google.com/detail/formslayer/ggfgoklgbbdajjhlonlfhhbeaigdnlnf"><img src="https://img.shields.io/badge/Chrome%20Web%20Store-available-green?logo=googlechrome&logoColor=white" alt="Chrome Web Store"></a>
+  <img src="https://img.shields.io/badge/Manifest-V3-blue" alt="Manifest V3">
+</p>
+
+<p align="center">
   <img src="icons/icon128.png" alt="FormSlayer icon" width="96" />
 </p>
 
