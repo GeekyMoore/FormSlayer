@@ -3,8 +3,9 @@ const CONTENT_SCRIPT_VERSION = "required-state-sync-v1";
 
 // Profile field config
 const fieldMap = {
-  firstName:   ["first name", "first_name", "fname", "given name", "legal first", "preferred first"],
+  firstName:   ["first name", "first_name", "fname", "given name", "legal first"],
   lastName:    ["last name", "last_name", "lname", "surname", "family name", "legal last"],
+  preferredName: ["preferred name", "preferred first name", "goes by", "nickname"],
   email:       ["email", "e-mail"],
   phone:       ["phone", "phone number", "mobile number", "cell", "telephone"],
   address:     ["address", "street"],
@@ -16,14 +17,13 @@ const fieldMap = {
   website:     ["personal website", "portfolio", "personal site", "share your portfolio"],
   jobTitle:    ["job title", "current title", "recent job title", "position", "current position"],
   employer:    ["employer", "company", "company name", "recent employer", "current employer", "current company", "organization"],
-  preferredName: ["preferred name", "preferred first name", "goes by", "nickname", "full name", "fullname", "name"],
   salary:      ["salary", "compensation", "compensation requirements", "expected salary", "salary expectation", "pay expectation", "salary expectations", "desired pay", "expected pay", "desired annual base salary", "annual base salary", "desired base salary", "base salary"],
   travelAvailability: ["travel availability", "willingness to travel", "travel requirement", "travel percentage", "percent travel", "% travel", "travel (percent)", "travel up to"],
   educationLevel: ["education", "education level", "highest education", "highest education obtained", "degree", "highest degree"],
   startDate:   ["start date", "available to start", "when can you start", "availability", "available start"],
   coverLetter: ["cover letter"],
   familyWorksAtCompany: ["anyone in your family", "in your family currently work", "family member employed", "family member work", "know anyone who works", "relative employed", "related to an employee", "related to anyone", "former employee at", "currently employed by a company who uses", "employed by a company who uses", "affiliated brands"],
-  priorCompanyRelationship: ["have you ever worked at", "have you ever worked for", "previously worked at any", "previously worked at", "previously been directly employed", "been directly employed", "directly employed by", "worked at any entity", "do you currently work at", "do you currently work for", "have you ever applied", "ever applied to", "ever applied at", "previously applied", "worked here before", "prior employment with"]
+  priorCompanyRelationship: ["have you ever worked at", "have you ever worked for", "have you ever been employed", "been employed", "employed by", "previously worked at any", "previously worked at", "previously been directly employed", "been directly employed", "directly employed by", "worked at any entity", "do you currently work at", "do you currently work for", "have you ever applied", "ever applied to", "ever applied at", "previously applied", "worked here before", "prior employment with"]
 };
 
 // Travel availability normalization
@@ -515,7 +515,7 @@ function whenFormReady(run, maxWaitMs = 8000) {
     observer?.disconnect();
     clearTimeout(debounceTimer);
     clearTimeout(maxTimer);
-    run();
+    setTimeout(run, 700);
   };
   const schedule = () => {
     if (ran) return;
@@ -571,6 +571,7 @@ function matchField(el) {
       continue;
     }
     if (keywords.some(k => keywordMatches(haystack, k))) {
+      if (key === "firstName" && /\bpreferred\b/.test(haystack)) continue;
       if (key === "country" && isPhoneDialCodeField(el)) continue;
       if (key === "jobTitle" && fieldMap.salary.some(k => keywordMatches(haystack, k))) continue;
       if (
@@ -832,11 +833,12 @@ function fillInput(el, value) {
   }
   el.dispatchEvent(new InputEvent("input", {
     bubbles: true,
+    composed: true,
     cancelable: true,
     inputType: "insertText",
     data: inputValue
   }));
-  el.dispatchEvent(new Event("change", { bubbles: true }));
+  el.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
   el.blur();
 }
 
@@ -852,10 +854,24 @@ function getChoiceContext(el) {
   };
 }
 
+function activateChoice(el) {
+  if (!el) return;
+  if (el.readOnly || el.disabled) {
+    const label = el.closest("label") || (el.id ? document.querySelector(`label[for="${el.id}"]`) : null);
+    if (label) {
+      label.click();
+      return;
+    }
+    el.parentElement?.click();
+    return;
+  }
+  el.click();
+}
+
 function clickChoiceIfMatches(el, pref, label, value) {
   if (!pref) return false;
   if (textMatchesChoicePreference(pref, label, value)) {
-    el.click();
+    activateChoice(el);
     return true;
   }
   return false;
@@ -1802,7 +1818,7 @@ async function runFill(data, options = {}) {
         }
         if (!optionText) optionText = (el.closest("li")?.innerText || label).trim();
         if (workAuthStatusOptionMatches(workAuthPref, optionText)) {
-          el.click();
+          activateChoice(el);
           workAuthClickedGroups.add(groupKey);
         }
         return;
@@ -1812,7 +1828,7 @@ async function runFill(data, options = {}) {
         ? workAuthYesOption(label, value)
         : workAuthNoOption(label, value);
       if (matches) {
-        el.click();
+        activateChoice(el);
         workAuthClickedGroups.add(groupKey);
       }
     });
@@ -1998,8 +2014,8 @@ async function runFill(data, options = {}) {
   await applyChoiceSettingsPass();
   await applyChoiceSettingsPass();
 
-  // Family / prior company — radios, selects, or free-text (some forms type "No" in a text field)
-  document.querySelectorAll("input[type=radio], input[type=checkbox], input[type=text], textarea, select").forEach(el => {
+  // Family / prior company — radios, selects, comboboxes, or free-text
+  for (const el of document.querySelectorAll("input[type=radio], input[type=checkbox], input[type=text], textarea, select")) {
     const label = getLabel(el);
     const text =
       el.tagName === "SELECT" || el.type === "text" || el.tagName === "TEXTAREA"
@@ -2008,35 +2024,39 @@ async function runFill(data, options = {}) {
     const key = ["familyWorksAtCompany", "priorCompanyRelationship"].find(
       k => data[k] && fieldMap[k].some(phrase => text.includes(phrase))
     );
-    if (!key) return;
+    if (!key) continue;
     const pref = String(data[key]).toLowerCase().trim();
-    if (el.type === "text" || el.tagName === "TEXTAREA") {
+    const role = (el.getAttribute("role") || "").toLowerCase();
+    if (role === "combobox") {
+      await setComboboxOption(el, pref, key);
+      continue;
+    }
+    if ((el.type === "text" || el.tagName === "TEXTAREA") && el.tagName !== "SELECT") {
       fillInput(el, pref);
-      return;
+      continue;
     }
     if (el.tagName === "SELECT") {
       setSelectOption(el, o => o.text.toLowerCase().includes(pref) || (o.value || "").toLowerCase() === pref);
-      return;
+      continue;
     }
     clickChoiceIfMatches(el, pref, label, (el.value || "").toLowerCase());
-  });
+  }
 
   await fillFabricBackedSelects(data);
 
-  let mainLoopFilled = 0;
-  const fillableNow = collectFillable();
-  for (const el of fillableNow) {
-    const questionText = getFieldQuestionText(el);
-    if (isYearsExperienceQuantityQuestion(questionText)) continue;
-    const key = matchField(el);
-    if (!key || !data[key] || key === "familyWorksAtCompany" || key === "priorCompanyRelationship") continue;
-    if (key === "country" && isPhoneDialCodeField(el)) continue;
-    const inputType = (el.type || "").toLowerCase();
-    if (inputType === "radio" || inputType === "checkbox") continue;
-    mainLoopFilled++;
-    const role = (el.getAttribute("role") || "").toLowerCase();
-    const skippedIti = role === "combobox" && !el.classList.contains("select__input") && Boolean(el.closest(".iti"));
-    if (el.tagName === "SELECT") {
+  async function fillMatchedProfileFields() {
+    let filled = 0;
+    for (const el of collectFillable()) {
+      const questionText = getFieldQuestionText(el);
+      if (isYearsExperienceQuantityQuestion(questionText)) continue;
+      const key = matchField(el);
+      if (!key || !data[key] || key === "familyWorksAtCompany" || key === "priorCompanyRelationship") continue;
+      if (key === "country" && isPhoneDialCodeField(el)) continue;
+      const inputType = (el.type || "").toLowerCase();
+      if (inputType === "radio" || inputType === "checkbox") continue;
+      const role = (el.getAttribute("role") || "").toLowerCase();
+      const skippedIti = role === "combobox" && !el.classList.contains("select__input") && Boolean(el.closest(".iti"));
+      if (el.tagName === "SELECT") {
         if (isFabricBackedSelect(el)) continue;
         let opt;
         if (key === "travelAvailability") {
@@ -2044,7 +2064,6 @@ async function runFill(data, options = {}) {
           if (desiredBucket) {
             opt = [...el.options].find(o => bucketFromText(o.text) === desiredBucket);
           }
-          // Fallback to substring match if bucket logic didn't find anything
           if (!opt) {
             const raw = String(data[key]).toLowerCase();
             opt = [...el.options].find(o => o.text.toLowerCase().includes(raw));
@@ -2060,34 +2079,46 @@ async function runFill(data, options = {}) {
           const raw = String(data[key]).toLowerCase();
           opt = [...el.options].find(o => o.text.toLowerCase().includes(raw) || String(o.value || "").toLowerCase() === raw);
         }
-        if (opt) setSelectOption(el, o => o === opt);
-    } else if (role === "combobox") {
-      if (skippedIti) continue;
-      let comboboxOk = false;
-      if (key === "travelAvailability") {
-        const desiredBucket = normalizeTravelBucket(data[key]);
-        if (!desiredBucket) continue;
-        comboboxOk = await selectComboboxOption(el, (text) => bucketFromText(text) === desiredBucket);
-      } else if (key === "state") {
-        const values = getStateMatchValues(data[key]);
-        comboboxOk = await selectComboboxOption(el, (text, value) => {
-          const optionText = String(text || "").toLowerCase();
-          const optionValue = String(value || "").toLowerCase();
-          return values.some(v => optionText.includes(v) || optionValue === v);
-        }, String(data[key]));
+        if (opt) {
+          setSelectOption(el, o => o === opt);
+          filled++;
+        }
+      } else if (role === "combobox") {
+        if (skippedIti) continue;
+        let comboboxOk = false;
+        if (key === "travelAvailability") {
+          const desiredBucket = normalizeTravelBucket(data[key]);
+          if (!desiredBucket) continue;
+          comboboxOk = await selectComboboxOption(el, (text) => bucketFromText(text) === desiredBucket);
+        } else if (key === "state") {
+          const values = getStateMatchValues(data[key]);
+          comboboxOk = await selectComboboxOption(el, (text, value) => {
+            const optionText = String(text || "").toLowerCase();
+            const optionValue = String(value || "").toLowerCase();
+            return values.some(v => optionText.includes(v) || optionValue === v);
+          }, String(data[key]));
+        } else {
+          const raw = String(data[key]).toLowerCase();
+          comboboxOk = await selectComboboxOption(el, (text, value) => {
+            const optionText = String(text || "").toLowerCase();
+            const optionValue = String(value || "").toLowerCase();
+            return optionText.includes(raw) || optionValue === raw;
+          }, String(data[key]));
+        }
+        if (comboboxOk) filled++;
       } else {
-        const raw = String(data[key]).toLowerCase();
-        comboboxOk = await selectComboboxOption(el, (text, value) => {
-          const optionText = String(text || "").toLowerCase();
-          const optionValue = String(value || "").toLowerCase();
-          return optionText.includes(raw) || optionValue === raw;
-        }, String(data[key]));
+        if (key === "phone") await fillPhoneInput(el, data[key], data.country);
+        else fillInput(el, data[key]);
+        filled++;
       }
-    } else {
-      if (key === "phone") await fillPhoneInput(el, data[key], data.country);
-      else fillInput(el, data[key]);
     }
+    return filled;
   }
+
+  let mainLoopFilled = await fillMatchedProfileFields();
+  await new Promise(resolve => setTimeout(resolve, 1200));
+  mainLoopFilled = Math.max(mainLoopFilled, await fillMatchedProfileFields());
+  const fillableNow = collectFillable();
   const requiredState = refreshRequiredMarkers();
   requiredMarkerState.lastBroadcastRemaining = requiredState.remaining;
   return {
@@ -2101,14 +2132,15 @@ async function runFill(data, options = {}) {
 // Message bootstrap
 function onFillMessage(msg, _sender, sendResponse) {
   if (msg.action === "ping") {
-    sendResponse({ ok: true, version: CONTENT_SCRIPT_VERSION });
+    sendResponse({ ok: true, version: CONTENT_SCRIPT_VERSION, debug: { inputsCount: collectFillable().length } });
     return;
   }
   if (msg.action === "fill") {
     const payload = msg.data;
     whenFormReady(() => {
       runFill(payload, { showRequiredMarkers: msg.showRequiredMarkers })
-        .then(debug => sendResponse({ ok: true, debug }));
+        .then(debug => sendResponse({ ok: true, debug }))
+        .catch(err => sendResponse({ ok: false, error: String(err) }));
     });
     return true;
   }
@@ -2154,4 +2186,15 @@ document.addEventListener("input", window.__formSlayerRequiredMarkerHandler, tru
 document.addEventListener("change", window.__formSlayerRequiredMarkerHandler, true);
 window.__formSlayerOnFillMessage = onFillMessage;
 chrome.runtime.onMessage.addListener(onFillMessage);
+window.__formSlayerPing = () => ({
+  ok: true,
+  version: CONTENT_SCRIPT_VERSION,
+  debug: { inputsCount: collectFillable().length }
+});
+window.__formSlayerRunFillAsync = (data, showRequiredMarkers) =>
+  new Promise((resolve, reject) => {
+    whenFormReady(() => {
+      runFill(data, { showRequiredMarkers }).then(resolve).catch(reject);
+    });
+  });
 })();

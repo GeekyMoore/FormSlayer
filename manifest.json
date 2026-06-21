@@ -9,7 +9,22 @@
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
-  "permissions": ["storage", "activeTab", "scripting"],
+  "permissions": ["storage", "activeTab", "scripting", "webNavigation"],
+  "host_permissions": [
+    "https://job-boards.greenhouse.io/*",
+    "https://boards.greenhouse.io/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://job-boards.greenhouse.io/*",
+        "https://boards.greenhouse.io/*"
+      ],
+      "js": ["state-aliases.js", "area-code-aliases.js", "content.js"],
+      "all_frames": true,
+      "run_at": "document_idle"
+    }
+  ],
   "action": {
     "default_popup": "popup.html",
     "default_title": "FormSlayer",

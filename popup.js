@@ -137,31 +137,21 @@ function setStatus(text, isError) {
   if (text) setTimeout(() => { status.textContent = ""; status.style.color = "green"; }, 3000);
 }
 
-function injectContentScript(tabId, callback) {
-  chrome.scripting.executeScript(
-    { target: { tabId, allFrames: true }, files: ["state-aliases.js", "area-code-aliases.js", "content.js"] },
-    callback
-  );
-}
-
-function ensureContentScript(tabId, callback) {
-  messageAllFrames(tabId, { action: "ping" }, (err, responses) => {
-    const hasMatchingVersion = !err && responses.some(r => r?.ok && r.version === EXPECTED_CONTENT_VERSION);
-    if (hasMatchingVersion) {
-      callback(null);
-      return;
-    }
-    injectContentScript(tabId, () => {
-      if (chrome.runtime.lastError) {
-        callback(chrome.runtime.lastError);
+function getTabFrameIds(tabId, callback) {
+  if (chrome.webNavigation?.getAllFrames) {
+    chrome.webNavigation.getAllFrames({ tabId }, (frames) => {
+      if (!chrome.runtime.lastError && frames?.length) {
+        callback(null, frames.map(f => f.frameId));
         return;
       }
-      setTimeout(() => callback(null), 150);
+      probeFrameIdsViaScripting(tabId, callback);
     });
-  });
+    return;
+  }
+  probeFrameIdsViaScripting(tabId, callback);
 }
 
-function messageAllFrames(tabId, message, callback) {
+function probeFrameIdsViaScripting(tabId, callback) {
   chrome.scripting.executeScript(
     { target: { tabId, allFrames: true }, func: () => true },
     (results) => {
@@ -169,16 +159,123 @@ function messageAllFrames(tabId, message, callback) {
         callback(chrome.runtime.lastError, []);
         return;
       }
-      const responses = [];
-      let pending = results.length;
-      results.forEach((r) => {
-        chrome.tabs.sendMessage(tabId, message, { frameId: r.frameId }, (response) => {
-          if (!chrome.runtime.lastError && response) responses.push({ ...response, frameId: r.frameId });
-          if (--pending === 0) callback(null, responses);
-        });
-      });
+      callback(null, results.map(r => r.frameId));
     }
   );
+}
+
+function countTabFrames(tabId, callback) {
+  getTabFrameIds(tabId, (err, frameIds) => {
+    callback(err, frameIds?.length || 0);
+  });
+}
+
+function waitForFormFrames(tabId, maxWaitMs, callback) {
+  const deadline = Date.now() + maxWaitMs;
+  let lastCount = -1;
+  let stablePasses = 0;
+  const poll = () => {
+    countTabFrames(tabId, (err, count) => {
+      if (err) {
+        callback(err);
+        return;
+      }
+      if (count > 0 && count === lastCount) stablePasses++;
+      else stablePasses = 0;
+      lastCount = count;
+      if (stablePasses >= 2 || Date.now() >= deadline) {
+        callback(null, count);
+        return;
+      }
+      setTimeout(poll, 300);
+    });
+  };
+  poll();
+}
+
+function injectContentScript(tabId, callback) {
+  chrome.scripting.executeScript(
+    { target: { tabId, allFrames: true }, files: ["state-aliases.js", "area-code-aliases.js", "content.js"] },
+    callback
+  );
+}
+
+function prepareForFill(tabId, callback) {
+  injectContentScript(tabId, () => {
+    if (chrome.runtime.lastError) {
+      callback(chrome.runtime.lastError);
+      return;
+    }
+    setTimeout(() => callback(null), 400);
+  });
+}
+
+function pingAllFrames(tabId, callback) {
+  chrome.scripting.executeScript({
+    target: { tabId, allFrames: true },
+    func: () => (typeof window.__formSlayerPing === "function"
+      ? window.__formSlayerPing()
+      : { ok: false, debug: { inputsCount: 0 } })
+  }, (results) => {
+    if (chrome.runtime.lastError) {
+      callback(chrome.runtime.lastError, []);
+      return;
+    }
+    callback(null, (results || []).map(r => ({ ...r.result, frameId: r.frameId })));
+  });
+}
+
+function executeFillInAllFrames(tabId, data, callback) {
+  const showRequiredMarkers = getShowRequiredMarkers();
+  chrome.scripting.executeScript({
+    target: { tabId, allFrames: true },
+    func: async (payload, markers) => {
+      if (typeof window.__formSlayerRunFillAsync !== "function") {
+        return { ok: false, debug: { mainLoopFilled: 0, inputsCount: 0, noScript: true } };
+      }
+      try {
+        const debug = await window.__formSlayerRunFillAsync(payload, markers);
+        return { ok: true, debug };
+      } catch (e) {
+        return { ok: false, error: String(e), debug: { mainLoopFilled: 0, inputsCount: 0 } };
+      }
+    },
+    args: [data, showRequiredMarkers]
+  }, (results) => {
+    if (chrome.runtime.lastError) {
+      callback(chrome.runtime.lastError, []);
+      return;
+    }
+    callback(null, (results || []).map(r => ({ ...r.result, frameId: r.frameId })));
+  });
+}
+
+function ensureContentScript(tabId, callback) {
+  pingAllFrames(tabId, (err, responses) => {
+    const okPings = (responses || []).filter(r => r?.ok && r.version === EXPECTED_CONTENT_VERSION);
+    if (!err && okPings.length) {
+      callback(null);
+      return;
+    }
+    prepareForFill(tabId, callback);
+  });
+}
+
+function messageAllFrames(tabId, message, callback) {
+  getTabFrameIds(tabId, (err, frameIds) => {
+    if (err || !frameIds?.length) {
+      callback(err, []);
+      return;
+    }
+    const responses = [];
+    let pending = frameIds.length;
+    frameIds.forEach((frameId) => {
+      chrome.tabs.sendMessage(tabId, message, { frameId }, (response) => {
+        if (!chrome.runtime.lastError && response) responses.push({ ...response, frameId });
+        if (--pending === 0) callback(null, responses);
+      });
+    });
+  });
 }
 
 function messageFrame(tabId, frameId, message, callback) {
@@ -195,17 +292,18 @@ function sendMarkerPreferenceToTab(tabId, enabled) {
   messageAllFrames(tabId, { action: "setRequiredMarkers", enabled }, () => {});
 }
 
-function sendFillToTab(tabId, data, retriesLeft = 2) {
-  messageAllFrames(tabId, { action: "fill", data, showRequiredMarkers: getShowRequiredMarkers() }, (err, responses) => {
-    const okResponses = responses.filter(r => r?.ok);
-    if (err || !okResponses.length) {
+function sendFillToTab(tabId, data, retriesLeft = 5) {
+  executeFillInAllFrames(tabId, data, (err, responses) => {
+    const okResponses = (responses || []).filter(r => r?.ok);
+    const anyResponses = (responses || []).filter(r => r != null);
+    if (err || !anyResponses.length) {
       if (retriesLeft > 0) {
-        injectContentScript(tabId, () => {
+        prepareForFill(tabId, () => {
           if (chrome.runtime.lastError) {
             setStatus("Can't fill this page - refresh it and try again.", true);
             return;
           }
-          setTimeout(() => sendFillToTab(tabId, data, retriesLeft - 1), 150);
+          setTimeout(() => sendFillToTab(tabId, data, retriesLeft - 1), 500);
         });
         return;
       }
@@ -213,8 +311,20 @@ function sendFillToTab(tabId, data, retriesLeft = 2) {
       return;
     }
     const filled = okResponses.reduce((sum, r) => sum + (r.debug?.mainLoopFilled || 0), 0);
+    const frames = anyResponses.length;
+    const inputsCount = anyResponses.reduce((max, r) => Math.max(max, r.debug?.inputsCount || 0), 0);
+    const missingScript = anyResponses.some(r => r.debug?.noScript);
+    if (!filled && retriesLeft > 0 && (missingScript || inputsCount > 0)) {
+      prepareForFill(tabId, () => {
+        if (chrome.runtime.lastError) {
+          setStatus("Can't fill this page - refresh it and try again.", true);
+          return;
+        }
+        setTimeout(() => sendFillToTab(tabId, data, retriesLeft - 1), 800);
+      });
+      return;
+    }
     applyRequiredResponses(okResponses);
-    const frames = okResponses.length;
     if (filled) {
       setStatus(`Filled ${filled} field(s) in ${frames} frame(s)`);
     } else {
@@ -266,8 +376,8 @@ document.getElementById("fillBtn").addEventListener("click", () => {
         return;
       }
       trackedTabId = tab.id;
-      ensureContentScript(tab.id, (err) => {
-        if (err) {
+      waitForFormFrames(tab.id, 10000, (waitErr) => {
+        if (waitErr) {
           setStatus("Can't fill this page - refresh it and try again.", true);
           return;
         }
