@@ -1,16 +1,13 @@
 #!/usr/bin/env python3
-"""Label-matching checks against live Greenhouse HTML. Run: python3 tests/sandbox/run.py"""
+"""Label-matching checks against the local embed-form fixture. Run: python3 tests/sandbox/run.py"""
 
 import re
 import sys
-import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 CONTENT_JS = ROOT / "content.js"
-GREENHOUSE_URL = (
-    "https://job-boards.greenhouse.io/embed/job_app?for=redventures&token=7808331"
-)
+FIXTURE_HTML = Path(__file__).resolve().parent / "fixture.html"
 
 EXPECTED_LABELS = {
     "firstName": "First Name",
@@ -58,16 +55,10 @@ def match_field(label, field_map):
     return None
 
 
-def fetch_html(url):
-    req = urllib.request.Request(url, headers={"User-Agent": "FormSlayer-sandbox-test/1.0"})
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        return resp.read().decode("utf-8", errors="replace")
-
-
 def extract_labels(html):
     labels = set()
     labels.update(re.findall(r'aria-label="([^"]+)"', html, re.I))
-    for text in re.findall(r'<label[^>]*>(.*?)</label>', html, re.I | re.S):
+    for text in re.findall(r"<label[^>]*>(.*?)</label>", html, re.I | re.S):
         cleaned = re.sub(r"<[^>]+>", "", text)
         cleaned = re.sub(r"\s+", " ", cleaned).strip()
         if cleaned:
@@ -77,12 +68,12 @@ def extract_labels(html):
 
 def main():
     field_map = load_field_map()
-    html = fetch_html(GREENHOUSE_URL)
+    html = FIXTURE_HTML.read_text(encoding="utf-8")
     labels = extract_labels(html)
     failures = []
 
     if 'id="first_name"' not in html:
-        failures.append("first_name input missing from HTML")
+        failures.append("first_name input missing from fixture")
 
     for key, fragment in EXPECTED_LABELS.items():
         label = next((l for l in labels if fragment.lower() in l.lower()), None)
